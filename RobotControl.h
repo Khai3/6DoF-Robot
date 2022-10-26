@@ -5,14 +5,24 @@
 class Robot
 {
 public:
-    // Constructor
-    // Input: link lengths of Skyentific Robot and home position M
+    /* Constructor
+     * Input: link lengths of Skyentific Robot
+     * Description: Define the link lengths of Robot. The home postion 'M' and its corresponding screw axes are defined and
+     *              calculated here as well
+     */   
     Robot(float r1_in=47, float r2_in=110, float r3_in=26, float d1_in = 133, float d4_in=117.5, float d6_in=28);
 
-    // Calculate end effector pose given joint angles
+    /* Input: Joint angles in radians
+     * Description: Calculate end effector pose given joint angles using the product of exponentials formula 
+     * Output: A 4x4 transformation matrix 
+     */
     Eigen::Matrix4d ForwardKinematics(float theta1=0, float theta2=0, float theta3=0, float theta4=0, float theta5=0, float theta6=0);
 
-    // void Inverse Kinematics();
+    /*Input: Transformation matrix of end effector
+     *Description: Calculate desired joint angles analytically given an end effector pose
+     *Output: An array of joint angle values
+     */
+    float* InverseKinematics(Eigen::Matrix4d end_pose);
 
 private:
     float r1;
