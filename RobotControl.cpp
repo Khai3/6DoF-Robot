@@ -44,16 +44,33 @@ float* Robot::InverseKinematics(Eigen::Matrix4d end_pose)
 {
     // Calculate wrist center
     Eigen::Vector3d end_position = end_pose.block<3,1>(3,0);
-    Eigen::Vector3d x_axis = end.pose.block<3,1>(0,0);
+    Eigen::Vector3d x_axis = end_pose.block<3,1>(0,0);
     Eigen::Vector3d wrist_center = end_position - (x_axis * d6);
 
     // Calculate desired joint angles of robot analytically
     float joint_angles[5];
+    float px,py,pz;
     px =  wrist_center[0]; 
     py = wrist_center[1];
     pz = wrist_center[2];
 
-    joint_angles[0] = std::atan2(py, px)
-    joint_angles[1] = std::atan2(pz-d1, std:sqrt(px*px + py*py) + r1)
+    // Joint 1
+    joint_angles[0] = std::atan2(py, px);
 
+    // Joint 2
+    float l,h,p,br3,cos_b;
+    l = std::sqrt(px*px + py*py) - r1;
+    h = pz-d1;
+    p = std::sqrt(h*h + l*l);
+    br3 = std::sqrt(r3*r3+d4*d4);
+    cos_b = (p*p + r2*r2 - br3*br3) / (2*p*r2); 
+    joint_angles[1] = std::atan2(h, l) + atan2(std::sqrt(1-cos_b*cos_b),cos_b);
+
+    // Joint 3
+    float cos_v,d;
+    cos_v = (r2*r2 + br3*br3 - p*p) / (2*r2*br3);
+    d = atan2(d4,r3);
+    joint_angles[2] = (atan2(std::sqrt(1-cos_v*cos_v),cos_v) + d);  
+
+    return joint_angles;
 }

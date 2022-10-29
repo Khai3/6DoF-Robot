@@ -18,9 +18,9 @@ public:
      */
     Eigen::Matrix4d ForwardKinematics(float theta1=0, float theta2=0, float theta3=0, float theta4=0, float theta5=0, float theta6=0);
 
-    /*Input: Transformation matrix of end effector
-     *Description: Calculate desired joint angles analytically given an end effector pose
-     *Output: An array of joint angle values
+    /* Input: Transformation matrix of end effector
+     * Description: Calculate desired joint angles analytically given an end effector pose
+     * Output: An array of joint angle values
      */
     float* InverseKinematics(Eigen::Matrix4d end_pose);
 
