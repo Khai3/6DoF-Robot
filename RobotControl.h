@@ -22,7 +22,7 @@ public:
      * Description: Calculate desired joint angles analytically given an end effector pose
      * Output: An array of joint angle values
      */
-    float* InverseKinematics(Eigen::Matrix4d end_pose);
+    std::array<float,6> InverseKinematics(Eigen::Matrix4d end_pose);
 
 private:
     float r1;
