@@ -1,6 +1,7 @@
 #include "RobotControl.h"
 #include "modern_robotics.h"
 #include <iostream>
+#include <cmath>
 
 #define PI 3.14159265
 
@@ -43,15 +44,15 @@ Eigen::Matrix4d Robot::ForwardKinematics(float theta1, float theta2, float theta
     return (end_pose);
 }
 
-std::array<float,6> Robot::InverseKinematics(Eigen::Matrix4d end_pose)
+Eigen::VectorXd Robot::InverseKinematics(Eigen::Matrix4d end_pose)
 {
     // Calculate wrist center
     Eigen::Vector3d end_position = end_pose.block<3,1>(0,3);
-    Eigen::Vector3d x_axis = end_pose.block<3,1>(0,0);
-    Eigen::Vector3d wrist_center = end_position - (x_axis * d6);
+    Eigen::Vector3d z_axis = end_pose.block<3,1>(0,2);
+    Eigen::Vector3d wrist_center = end_position - (z_axis * d6);
 
     // Calculate desired joint angles of robot analytically
-    std::array<float,6> joint_angles;
+    Eigen::VectorXd joint_angles(6);
     float px,py,pz;
     px =  wrist_center[0]; 
     py = wrist_center[1];
@@ -67,13 +68,124 @@ std::array<float,6> Robot::InverseKinematics(Eigen::Matrix4d end_pose)
     p = std::sqrt(h*h + l*l);
     br3 = std::sqrt(r3*r3+d4*d4);
     cos_b = (p*p + r2*r2 - br3*br3) / (2*p*r2); 
-    joint_angles[1] = std::atan2(h, l) + atan2(std::sqrt(1-cos_b*cos_b),cos_b) - PI/2;
+    joint_angles[1] = std::atan2(h, l) + std::atan2(std::sqrt(1-cos_b*cos_b),cos_b) - PI/2;
 
     // Joint 3
     float cos_v,d;
     cos_v = (r2*r2 + br3*br3 - p*p) / (2*r2*br3);
-    d = atan2(d4,r3);
-    joint_angles[2] = (atan2(std::sqrt(1-cos_v*cos_v),cos_v) + d - PI); 
+    d = std::atan2(d4,r3);
+    joint_angles[2] = std::atan2(std::sqrt(1-cos_v*cos_v),cos_v) + d - PI; 
+
+    // Joint 4,5 & 6
+    Eigen::Matrix4d expN1 = mr::MatrixExp6(mr::VecTose3((-S1)*joint_angles[0]));
+    Eigen::Matrix4d expN2 = mr::MatrixExp6(mr::VecTose3((-S2)*joint_angles[1]));
+    Eigen::Matrix4d expN3 = mr::MatrixExp6(mr::VecTose3((-S3)*joint_angles[2]));
+    Eigen::Matrix4d R = expN3 * expN2 * expN1 * end_pose * M.inverse(); 
+
+    joint_angles[3] = std::atan2(-R(1,0),R(2,0));
+    joint_angles[4] = std::atan2((std::sqrt(R(0,1)*R(0,1) + R(0,2)*R(0,2))), R(0,0));
+    joint_angles[5] = std::atan2(-R(0,1),-R(0,2));
 
     return joint_angles;
+}
+
+float Robot::CubicTimeScaling(float t,float Tf)
+{
+    float time_ratio = t/Tf;
+    float time_scale = 3*std::pow(time_ratio,2) - 2*std::pow(time_ratio,3);
+    return time_scale;
+}
+
+float Robot::QuinticTimeScaling(float t,float Tf)
+{
+    float time_ratio = t/Tf;
+    float time_scale = 10*std::pow(time_ratio, 3) - 15*std::pow(time_ratio, 4) + 6*std::pow(time_ratio, 5);
+    return time_scale;
+}
+
+Eigen::MatrixXd Robot::JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, int Tf, int N, const std::string &method)
+{
+    Eigen::MatrixXd traj(N,7);
+    for (int i = 0; i < N; i++)
+    {
+        float elapsed_time = (i/N-1) * Tf;
+        float time_scale;
+
+        // Calculate polynomial time scaling
+        if (method == std::string("Cubic"))
+        {
+            time_scale = CubicTimeScaling(elapsed_time,Tf);
+        }
+        else if (method == std::string("Quintic"))
+        {
+            time_scale = QuinticTimeScaling(elapsed_time,Tf);
+        }
+        
+        // Calculate joint angles for specific elapsed time 
+        Eigen::VectorXd joint_angles = thetastart + time_scale * (thetaend - thetastart);
+        traj.block<1,7>(i,0) << joint_angles,elapsed_time;
+    }
+    return traj;
+}
+
+std::list<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
+{
+    std::list<std::tuple<Eigen::Matrix4d, float>> traj ;
+    for (int i = 0; i < N; i++)
+    {
+        float elapsed_time = (i/N-1) * Tf;
+        float time_scale;
+
+        // Calculate polynomial time scaling
+        if (method == std::string("Cubic"))
+        {
+            time_scale = CubicTimeScaling(elapsed_time,Tf);
+        }
+        else if (method == std::string("Quintic"))
+        {
+            time_scale = QuinticTimeScaling(elapsed_time,Tf);
+        }
+   
+        // Calculate SE(3) matrix for specific elapsed time
+        Eigen::Matrix4d transform = Xstart * mr::MatrixExp6(mr::MatrixLog6(Xstart.inverse()*Xend) * time_scale);
+        std::tuple<Eigen::Matrix4d,float> transform_stamped = std::make_tuple(transform,elapsed_time);
+        traj.push_back(transform_stamped);
+    }
+    return traj;
+}
+
+std::list<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
+{
+    std::list<std::tuple<Eigen::Matrix4d, float>> traj ;
+
+    // Initialise start & ending positions and rotations
+    Eigen::Vector4d start_pos = Xstart.col(3).head(3);
+    Eigen::Vector4d end_pos = Xend.col(3).head(3);
+    Eigen::Matrix3d start_rot = Xstart.block<3,3>(0,0);
+    Eigen::Matrix3d end_rot = Xend.block<3,3>(0,0);
+
+    for (int i = 0; i < N; i++)
+    {
+        float elapsed_time = (i/N-1) * Tf;
+        float time_scale;
+
+        // Calculate polynomial time scaling
+        if (method == std::string("Cubic"))
+        {
+            time_scale = CubicTimeScaling(elapsed_time,Tf);
+        }
+        else if (method == std::string("Quintic"))
+        {
+            time_scale = QuinticTimeScaling(elapsed_time,Tf);
+        }
+   
+        // Calculate SE(3) matrix for specific elapsed time
+        Eigen::Vector4d position = start_pos + time_scale * (end_pos - start_pos);
+        Eigen::Matrix3d rotation = start_rot * mr::MatrixExp3(mr::MatrixLog3(start_rot.inverse()*end_rot) * time_scale);
+        Eigen::Matrix4d transform; 
+        transform << rotation, position, 0, 0, 0, 1;
+        std::tuple<Eigen::Matrix4d,float> transform_stamped = std::make_tuple(transform,elapsed_time);
+        traj.push_back(transform_stamped);
+    }
+    return traj;
 }

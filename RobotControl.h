@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <list>
 
 class Robot
 {
@@ -22,7 +23,69 @@ public:
      * Description: Calculate desired joint angles analytically given an end effector pose
      * Output: An array of joint angle values
      */
-    std::array<float,6> InverseKinematics(Eigen::Matrix4d end_pose);
+    Eigen::VectorXd InverseKinematics(Eigen::Matrix4d end_pose);
+
+    /* Inputs:
+     *   t : The current time t satisfying 0 < t < Tf
+     *   Tf: Total time of the motion in seconds from start to end
+     * Description: Compute s(t) for a cubic time scaling
+     * Output: The path parameter corresponding to a third-order
+     *         polynomial motion that begins and ends at zero velocity
+     */
+    float CubicTimeScaling(float t,float Tf);
+    
+    /* Inputs:
+     *  t : The current time t satisfying 0 < t < Tf
+     *  Tf: Total time of the motion in seconds from start to end
+     * Description: Compute s(t) for a quintic time scaling
+     * Output: The path parameter corresponding to a fifth-order
+     *          polynomial motion that begins and ends at zero velocity
+     *	        and zero acceleration
+     */
+    float QuinticTimeScaling(float t,float Tf);
+
+    /* Inputs: 
+     *   thetastart: Initial joint variables
+     *   thetaend  : Final joint variables
+     *   Tf        : Total time of the motion in seconds from start to end
+     *   N         : Number of discrete points in trajectory
+     *   method    : The time scaling method (Cubic,Quintic)
+     * Description: Compute a straight-line trajectory in joint space
+     * Output: A trajectory as an N x 7 matrix. The 7th column is time elasped 
+     *         since start. The first row is thetastart + 0 and the Nth row is 
+     *         thetaend + T. The elapsed time between each row is Tf / (N - 1)
+     */
+    Eigen::MatrixXd JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, int Tf, int N, const std::string &method);
+
+    /*
+     * Inputs:
+     *   Xstart: The initial end-effector configuration
+     *   Xend  : The final end-effector configuration
+     *   Tf    : Total time of the motion in seconds from start to end
+     *	 N     : Number of discrete points in trajectory
+     *   method: The time scaling method (Cubic,Quintic)
+     * Description: Compute a trajectory as a list of N SE(3) matrices corresponding to
+     *			    the screw motion about a space screw axis
+     * Outputs: The discretized trajectory as a list of tuples of N matrices in SE(3)
+     *          and elapsed time. The first in the list is Xstart
+     *          and the Nth is Xend
+     */
+    std::list<std::tuple<Eigen::Matrix4d, float>> ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
+
+    /*
+     * Inputs:
+     *   Xstart: The initial end-effector configuration
+     *   Xend  : The final end-effector configuration
+     *   Tf    : Total time of the motion in seconds from start to end
+     *	 N     : Number of discrete points in trajectory
+     *   method: The time scaling method (Cubic,Quintic)
+     * Description: Compute a trajectory as a list of N SE(3) matrices corresponding to
+     *			    the origin of the end-effector frame following a straight line
+     * Outputs: The discretized trajectory as a list of tuples of N matrices in SE(3)
+     *          and elapsed time. The first in the list is Xstart
+     *          and the Nth is Xend
+     */
+    std::list<std::tuple<Eigen::Matrix4d, float>> CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
 
 private:
     float r1;

@@ -35,10 +35,13 @@ void FKSim(float theta1, float theta2, float theta3, float theta4, float theta5,
 void IKSim(Eigen::Matrix4d end_pose)
 {
     sim.startSimulation();
-    std::array<float,6> theta = ArmBot.InverseKinematics(end_pose);
-    sim.setJointTargetPosition(joint1,theta[0]);
-    sim.setJointTargetPosition(joint2,theta[1]);
-    sim.setJointTargetPosition(joint3,theta[2]);
+    Eigen::VectorXd theta = ArmBot.InverseKinematics(end_pose);
+    sim.setJointTargetPosition(joint1,theta(0));
+    sim.setJointTargetPosition(joint2,theta(1));
+    sim.setJointTargetPosition(joint3,theta(2));
+    sim.setJointTargetPosition(joint4,theta(3));
+    sim.setJointTargetPosition(joint5,theta(4));
+    sim.setJointTargetPosition(joint6,theta(5));
 }
 
 int main(int argc, char *argv[])
@@ -46,8 +49,8 @@ int main(int argc, char *argv[])
     if (argv[1] == std::string("FKSim"))
     {
         float theta1 = 90*PI/180;
-        float theta2 = 10*PI/180;
-        float theta3 = 10*PI/180;
+        float theta2 = 0*PI/180;
+        float theta3 = 0*PI/180;
         float theta4 = 90*PI/180;
         float theta5 = 90*PI/180;
         float theta6 = 90*PI/180;
@@ -58,9 +61,19 @@ int main(int argc, char *argv[])
     {
         Eigen::Matrix4d end;
         end << 0,0,1,60,
-               1,0,0,140,
-               0,1,0,280,
+               1,0,0,100,
+               0,1,0,306,
                0,0,0,1;
+
+        // end << 1,0,0,90,
+        //        0,1,0,50,
+        //        0,0,1,200,
+        //        0,0,0,1;
+
+        // end << 0,0,1,28,
+        //        1,0,0,129,
+        //        0,1,0,306,
+        //        0,0,0,1;
         std::cout << end;
         IKSim(end);
     }
