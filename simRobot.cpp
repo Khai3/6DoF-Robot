@@ -16,26 +16,8 @@ auto joint4 = sim.getObject("/Joint_4");
 auto joint5 = sim.getObject("/Joint_5");
 auto joint6 = sim.getObject("/Joint_6");
 
-// Define different functions for simulation test
-
-void FKSim(float theta1, float theta2, float theta3, float theta4, float theta5, float theta6)
+void setJointPos(const Eigen::VectorXd &theta)
 {
-    sim.startSimulation();
-    sim.setJointTargetPosition(joint1,theta1);
-    sim.setJointTargetPosition(joint2,theta2);
-    sim.setJointTargetPosition(joint3,theta3);
-    sim.setJointTargetPosition(joint4,theta4);
-    sim.setJointTargetPosition(joint5,theta5);
-    sim.setJointTargetPosition(joint6,theta6);
-
-    auto end = ArmBot.ForwardKinematics(theta1,theta2,theta3,theta4,theta5,theta6);
-    std::cout << end;
-}
-
-void IKSim(Eigen::Matrix4d end_pose)
-{
-    sim.startSimulation();
-    Eigen::VectorXd theta = ArmBot.InverseKinematics(end_pose);
     sim.setJointTargetPosition(joint1,theta(0));
     sim.setJointTargetPosition(joint2,theta(1));
     sim.setJointTargetPosition(joint3,theta(2));
@@ -44,26 +26,92 @@ void IKSim(Eigen::Matrix4d end_pose)
     sim.setJointTargetPosition(joint6,theta(5));
 }
 
+// Define simulation tests
+
+void FKSim(const Eigen::VectorXd &theta)
+{
+    sim.startSimulation();
+    setJointPos(theta);
+
+    auto end = ArmBot.ForwardKinematics(theta);
+    std::cout << end;
+}
+
+void IKSim(Eigen::Matrix4d end_pose)
+{
+    sim.startSimulation();
+    Eigen::VectorXd theta = ArmBot.InverseKinematics(end_pose);
+    setJointPos(theta);    
+}
+
+void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, int Tf, int N, const std::string &method)
+{
+    Eigen::MatrixXd traj = ArmBot.JointTrajectory(thetastart,thetaend,Tf,N,method);
+    Eigen::VectorXd elapsed_time = traj.col(6);
+    for (int i = 0; i < N; i++) {
+        while (true) {   
+            if (sim.getSimulationTime() > elapsed_time(i)){
+                std::cout << sim.getSimulationTime();
+                Eigen::VectorXd theta = traj.row(i);
+                setJointPos(theta);
+                break;
+            }
+        }
+    }
+}
+
+void TrajSim(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, int path, const std::string &method)
+{
+    std::vector<std::tuple<Eigen::Matrix4d, float>> traj;
+    if (path = 0){
+        traj = ArmBot.ScrewTrajectory(Xstart,Xend,Tf,N,method);
+    }
+    else if(path = 1){
+        traj = ArmBot.CartesianTrajectory(Xstart,Xend,Tf,N,method);
+    }
+    for (const auto& transform_stamped : traj) {
+        Eigen::MatrixXd transform = std::get<0>(transform_stamped);
+        float elapsed_time = std::get<1>(transform_stamped);
+        while (true) {
+            if (sim.getSimulationTime() > elapsed_time) {
+                Eigen::VectorXd theta = ArmBot.InverseKinematics(transform);
+                setJointPos(theta);
+                break;
+            }
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {   
+    // Input basic robot configurations
+    Eigen::VectorXd thetaend(6),thetastart(6);
+    thetastart << 0,0,0,0,0,0;
+    thetaend << 90*PI/180,
+                0*PI/180,
+                0*PI/180,
+                90*PI/180,
+                90*PI/180,
+                90*PI/180;
+
+    Eigen::Matrix4d Xstart,Xend;
+    Xstart << 0,0,1,192.5,
+           1,0,0,0,
+           0,1,0,269,
+           0,0,0,1;
+    Xend << 0,0,1,60,
+           1,0,0,100,
+           0,1,0,306,
+           0,0,0,1;
+
+    // Run simulation test based on input argument
     if (argv[1] == std::string("FKSim"))
     {
-        float theta1 = 90*PI/180;
-        float theta2 = 0*PI/180;
-        float theta3 = 0*PI/180;
-        float theta4 = 90*PI/180;
-        float theta5 = 90*PI/180;
-        float theta6 = 90*PI/180;
-        FKSim(theta1,theta2,theta3,theta4,theta5,theta6);
+        FKSim(thetaend);
     }
 
     else if (argv[1] == std::string("IKSim"))
     {
-        Eigen::Matrix4d end;
-        end << 0,0,1,60,
-               1,0,0,100,
-               0,1,0,306,
-               0,0,0,1;
 
         // end << 1,0,0,90,
         //        0,1,0,50,
@@ -74,8 +122,30 @@ int main(int argc, char *argv[])
         //        1,0,0,129,
         //        0,1,0,306,
         //        0,0,0,1;
-        std::cout << end;
-        IKSim(end);
+        std::cout << Xend;
+        IKSim(Xend);
     }
+
+    else if (argv[1] == std::string("JointTraj"))
+    {
+        int Tf = 5;
+        int N = 10;
+        TrajSim(thetastart,thetaend,Tf,N,"cubic");
+    }
+
+    else if (argv[1] == std::string("ScrewTraj"))
+    {
+        int Tf = 5;
+        int N = 10;
+        TrajSim(Xstart,Xend,Tf,N,0,"cubic");
+    }
+
+    else if (argv[1] == std::string("CartesianTraj"))
+    {
+        int Tf = 5;
+        int N = 10;
+        TrajSim(Xstart,Xend,Tf,N,1,"cubic");
+    }
+
     return 0;
 }

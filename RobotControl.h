@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Eigen/Dense>
-#include <list>
+#include <vector>
 
 class Robot
 {
@@ -13,11 +13,11 @@ public:
      */   
     Robot(float r1_in=47, float r2_in=110, float r3_in=26, float d1_in = 133, float d4_in=117.5, float d6_in=28);
 
-    /* Input: Joint angles in radians
+    /* Input: Vector of joint angles in radians
      * Description: Calculate end effector pose given joint angles using the product of exponentials formula 
      * Output: A 4x4 transformation matrix 
      */
-    Eigen::Matrix4d ForwardKinematics(float theta1=0, float theta2=0, float theta3=0, float theta4=0, float theta5=0, float theta6=0);
+    Eigen::Matrix4d ForwardKinematics(const Eigen::VectorXd &theta);
 
     /* Input: Transformation matrix of end effector
      * Description: Calculate desired joint angles analytically given an end effector pose
@@ -70,7 +70,7 @@ public:
      *          and elapsed time. The first in the list is Xstart
      *          and the Nth is Xend
      */
-    std::list<std::tuple<Eigen::Matrix4d, float>> ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
+    std::vector<std::tuple<Eigen::Matrix4d, float>> ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
 
     /*
      * Inputs:
@@ -85,7 +85,7 @@ public:
      *          and elapsed time. The first in the list is Xstart
      *          and the Nth is Xend
      */
-    std::list<std::tuple<Eigen::Matrix4d, float>> CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
+    std::vector<std::tuple<Eigen::Matrix4d, float>> CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
 
 private:
     float r1;

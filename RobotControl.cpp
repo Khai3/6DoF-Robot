@@ -29,15 +29,15 @@ Robot::Robot(float r1_in, float r2_in, float r3_in, float d1_in, float d4_in, fl
     S6 << 1,0,0,0,r3+r2+d1,0;      
 }
 
-Eigen::Matrix4d Robot::ForwardKinematics(float theta1, float theta2, float theta3, float theta4, float theta5, float theta6)
+Eigen::Matrix4d Robot::ForwardKinematics(const Eigen::VectorXd &theta)
 { 
     // Calculate the exponential coordinates given the screw axes and desired joint angles of robot 
-    Eigen::Matrix4d exp1 = mr::MatrixExp6(mr::VecTose3(S1*theta1));
-    Eigen::Matrix4d exp2 = mr::MatrixExp6(mr::VecTose3(S2*theta2));
-    Eigen::Matrix4d exp3 = mr::MatrixExp6(mr::VecTose3(S3*theta3));
-    Eigen::Matrix4d exp4 = mr::MatrixExp6(mr::VecTose3(S4*theta4));
-    Eigen::Matrix4d exp5 = mr::MatrixExp6(mr::VecTose3(S5*theta5));
-    Eigen::Matrix4d exp6 = mr::MatrixExp6(mr::VecTose3(S6*theta6));
+    Eigen::Matrix4d exp1 = mr::MatrixExp6(mr::VecTose3(S1*theta(0)));
+    Eigen::Matrix4d exp2 = mr::MatrixExp6(mr::VecTose3(S2*theta(1)));
+    Eigen::Matrix4d exp3 = mr::MatrixExp6(mr::VecTose3(S3*theta(2)));
+    Eigen::Matrix4d exp4 = mr::MatrixExp6(mr::VecTose3(S4*theta(3)));
+    Eigen::Matrix4d exp5 = mr::MatrixExp6(mr::VecTose3(S5*theta(4)));
+    Eigen::Matrix4d exp6 = mr::MatrixExp6(mr::VecTose3(S6*theta(5)));
 
     // Calculate end effector pose using exponential coordinates and the robot's home configuration
     Eigen::Matrix4d end_pose = exp1 * exp2 * exp3 * exp4 * exp5 * exp6 * M;
@@ -128,9 +128,9 @@ Eigen::MatrixXd Robot::JointTrajectory(const Eigen::VectorXd &thetastart, const 
     return traj;
 }
 
-std::list<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
+std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
 {
-    std::list<std::tuple<Eigen::Matrix4d, float>> traj ;
+    std::vector<std::tuple<Eigen::Matrix4d, float>> traj;
     for (int i = 0; i < N; i++)
     {
         float elapsed_time = (i/N-1) * Tf;
@@ -154,9 +154,9 @@ std::list<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eigen
     return traj;
 }
 
-std::list<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
+std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
 {
-    std::list<std::tuple<Eigen::Matrix4d, float>> traj ;
+    std::vector<std::tuple<Eigen::Matrix4d, float>> traj ;
 
     // Initialise start & ending positions and rotations
     Eigen::Vector4d start_pos = Xstart.col(3).head(3);
