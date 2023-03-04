@@ -55,7 +55,7 @@ public:
      *         since start. The first row is thetastart + 0 and the Nth row is 
      *         thetaend + T. The elapsed time between each row is Tf / (N - 1)
      */
-    Eigen::MatrixXd JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, int Tf, int N, const std::string &method);
+    Eigen::MatrixXd JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, float Tf, int N, const std::string &method);
 
     /*
      * Inputs:
@@ -70,7 +70,7 @@ public:
      *          and elapsed time. The first in the list is Xstart
      *          and the Nth is Xend
      */
-    std::vector<std::tuple<Eigen::Matrix4d, float>> ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
+    std::vector<std::tuple<Eigen::Matrix4d, float>> ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, float Tf, int N, const std::string &method);
 
     /*
      * Inputs:
@@ -85,7 +85,7 @@ public:
      *          and elapsed time. The first in the list is Xstart
      *          and the Nth is Xend
      */
-    std::vector<std::tuple<Eigen::Matrix4d, float>> CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method);
+    std::vector<std::tuple<Eigen::Matrix4d, float>> CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, float Tf, int N, const std::string &method);
 
 private:
     float r1;

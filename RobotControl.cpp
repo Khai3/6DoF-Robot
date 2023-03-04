@@ -103,12 +103,12 @@ float Robot::QuinticTimeScaling(float t,float Tf)
     return time_scale;
 }
 
-Eigen::MatrixXd Robot::JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, int Tf, int N, const std::string &method)
+Eigen::MatrixXd Robot::JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend,const float Tf,const int N, const std::string &method)
 {
     Eigen::MatrixXd traj(N,7);
     for (int i = 0; i < N; i++)
     {
-        float elapsed_time = (i/N-1) * Tf;
+        float elapsed_time = (float)i/float(N-1) * Tf;
         float time_scale;
 
         // Calculate polynomial time scaling
@@ -123,17 +123,17 @@ Eigen::MatrixXd Robot::JointTrajectory(const Eigen::VectorXd &thetastart, const 
         
         // Calculate joint angles for specific elapsed time 
         Eigen::VectorXd joint_angles = thetastart + time_scale * (thetaend - thetastart);
-        traj.block<1,7>(i,0) << joint_angles,elapsed_time;
+        traj.block<1,7>(i,0) << joint_angles.transpose(), elapsed_time;
     }
     return traj;
 }
 
-std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
+std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend,const float Tf,const int N, const std::string &method)
 {
     std::vector<std::tuple<Eigen::Matrix4d, float>> traj;
     for (int i = 0; i < N; i++)
     {
-        float elapsed_time = (i/N-1) * Tf;
+        float elapsed_time = (float)i/float(N-1) * Tf;
         float time_scale;
 
         // Calculate polynomial time scaling
@@ -154,19 +154,19 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eig
     return traj;
 }
 
-std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, int Tf, int N, const std::string &method)
+std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend,const float Tf,const int N, const std::string &method)
 {
     std::vector<std::tuple<Eigen::Matrix4d, float>> traj ;
 
     // Initialise start & ending positions and rotations
-    Eigen::Vector4d start_pos = Xstart.col(3).head(3);
-    Eigen::Vector4d end_pos = Xend.col(3).head(3);
+    Eigen::Vector3d start_pos = Xstart.col(3).head(3);
+    Eigen::Vector3d end_pos = Xend.col(3).head(3);
     Eigen::Matrix3d start_rot = Xstart.block<3,3>(0,0);
     Eigen::Matrix3d end_rot = Xend.block<3,3>(0,0);
 
     for (int i = 0; i < N; i++)
     {
-        float elapsed_time = (i/N-1) * Tf;
+        float elapsed_time = (float)i/float(N-1) * Tf;
         float time_scale;
 
         // Calculate polynomial time scaling
@@ -180,7 +180,7 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const
         }
    
         // Calculate SE(3) matrix for specific elapsed time
-        Eigen::Vector4d position = start_pos + time_scale * (end_pos - start_pos);
+        Eigen::Vector3d position = start_pos + time_scale * (end_pos - start_pos);
         Eigen::Matrix3d rotation = start_rot * mr::MatrixExp3(mr::MatrixLog3(start_rot.inverse()*end_rot) * time_scale);
         Eigen::Matrix4d transform; 
         transform << rotation, position, 0, 0, 0, 1;
