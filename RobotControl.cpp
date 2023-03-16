@@ -189,3 +189,51 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const
     }
     return traj;
 }
+
+std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ViaTrajectory(const std::vector<Eigen::Matrix4d> points, float Tf, int N)
+{
+    std::vector<std::tuple<Eigen::Matrix4d, float>> traj ;
+    int length = points.size();
+    float timegap = Tf/(length-1);
+
+    // Calculate heuristic for velocity
+    float dist = 0.0;
+    for (int i = 0; i < points.size() - 1; i++) 
+    {
+        dist += (points[i] - points[i+1]).norm();  // Compute total euclidean distance
+    }
+    Eigen::Vector3d v;
+    v.setConstant(dist/Tf);
+
+    for (int i = 0; i < length-1; i++)
+    {
+        // Calculate cubic polynomial between via points i and i+1 for position 
+        // Eigen::Matrix4d mat1,mat2 = points[i], points[i+1];
+        Eigen::Matrix4d mat1 = points[i],              mat2 = points[i+1];
+        Eigen::Vector3d pos1 = mat1.col(3).head(3),    pos2 = mat2.col(3).head(3);
+        Eigen::Matrix3d rot1 = mat1.block<3,3>(0,0),   rot2 = mat2.block<3,3>(0,0);
+        Eigen::Vector3d vel1 = (i == 0) ? Eigen::Vector3d::Zero() : v;
+        Eigen::Vector3d vel2 = (i+1 == length) ? Eigen::Vector3d::Zero() : v;
+
+        Eigen::Vector3d a0 = pos1;
+        Eigen::Vector3d a1 = vel1;
+        Eigen::Vector3d a2 = (3*pos2 - 3*pos1 - 2*vel1*timegap - vel2*timegap)/(timegap*timegap);
+        Eigen::Vector3d a3 = (2*pos1 + (vel1+vel2)*timegap - 2*pos2) / std::pow(timegap,3);
+
+        for (int j = 0; j < N; j++)
+        {
+            float delta_t = (float)j/float(N-1) * timegap; 
+            Eigen::Vector3d position = a0 + a1*delta_t + a2*std::pow(delta_t,2) + a3*std::pow(delta_t,3);
+
+            // Use cubic time scaling for rotation
+            float time_scale = CubicTimeScaling(delta_t,timegap);
+            Eigen::Matrix3d rotation = rot1 * mr::MatrixExp3(mr::MatrixLog3(rot1.inverse()*rot2) * time_scale);
+            
+            Eigen::Matrix4d transform; 
+            transform << rotation, position, 0, 0, 0, 1;
+            std::tuple<Eigen::Matrix4d,float> transform_stamped = std::make_tuple(transform, (timegap*i + delta_t));
+            traj.push_back(transform_stamped);
+        }
+    }
+    return traj;
+}

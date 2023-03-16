@@ -87,6 +87,17 @@ public:
      */
     std::vector<std::tuple<Eigen::Matrix4d, float>> CartesianTrajectory(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, float Tf, int N, const std::string &method);
 
+    
+    /* Inputs: 
+     *   points   : Vector of transformation matrices
+     *   Tf       : Total time of the motion in seconds from start to end
+     *   N        : Number of discrete points in trajectory between each via point
+     * Description: Compute a trajectory using cubic via-point interpolation in task space
+     * Output: The discretized trajectory as a list of tuples of N matrices in SE(3)
+     *         and elapsed time.
+     */
+    std::vector<std::tuple<Eigen::Matrix4d, float>> ViaTrajectory(const std::vector<Eigen::Matrix4d> points, float Tf, int N);
+
 private:
     float r1;
     float r2;
