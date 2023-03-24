@@ -33,6 +33,15 @@ public:
      *         polynomial motion that begins and ends at zero velocity
      */
     float CubicTimeScaling(float t,float Tf);
+
+    /* Inputs:
+     *   t : The current time t satisfying 0 < t < Tf
+     *   Tf: Total time of the motion in seconds from start to end
+     * Description: Compute derivation of s(t) for a cubic time scaling
+     * Output: The path velocity parameter corresponding to a third-order
+     *         polynomial motion that begins and ends at zero velocity
+     */
+    float CubicTimeScalingDot(float t,float Tf);
     
     /* Inputs:
      *  t : The current time t satisfying 0 < t < Tf
@@ -43,6 +52,16 @@ public:
      *	        and zero acceleration
      */
     float QuinticTimeScaling(float t,float Tf);
+
+        /* Inputs:
+     *  t : The current time t satisfying 0 < t < Tf
+     *  Tf: Total time of the motion in seconds from start to end
+     * Description: Compute derivation of s(t) for a quintic time scaling
+     * Output: The path velocity parameter corresponding to a fifth-order
+     *          polynomial motion that begins and ends at zero velocity
+     *	        and zero acceleration
+     */
+    float QuinticTimeScalingDot(float t,float Tf);
 
     /* Inputs: 
      *   thetastart: Initial joint variables
@@ -55,7 +74,7 @@ public:
      *         since start. The first row is thetastart + 0 and the Nth row is 
      *         thetaend + T. The elapsed time between each row is Tf / (N - 1)
      */
-    Eigen::MatrixXd JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, float Tf, int N, const std::string &method);
+    std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, float Tf, int N, const std::string &method);
 
     /*
      * Inputs:
@@ -89,14 +108,27 @@ public:
 
     
     /* Inputs: 
-     *   points   : Vector of transformation matrices
-     *   Tf       : Total time of the motion in seconds from start to end
-     *   N        : Number of discrete points in trajectory between each via point
+     *   points: Vector of transformation matrices
+     *   Tf    : Total time of the motion in seconds from start to end
+     *   N     : Number of discrete points in trajectory between each via point
      * Description: Compute a trajectory using cubic via-point interpolation in task space
      * Output: The discretized trajectory as a list of tuples of N matrices in SE(3)
      *         and elapsed time.
      */
     std::vector<std::tuple<Eigen::Matrix4d, float>> ViaTrajectory(const std::vector<Eigen::Matrix4d> points, float Tf, int N);
+
+    /* Inputs: 
+     *   Kp           : Proportional Gain Value
+     *   Ki           : Integral Gain Value
+     *   currentAngles: Vector of current joint angles of robot
+     *   desiredAngles: Vector of desired joint angles of robot
+     *   dt           : Time step
+     *   feedforward  : Vector of joint velocities as feedforward control
+     * Description: Compute the required joint velocity of the robot using feedback 
+     *              and feedforward control
+     * Output: The vector of joint velocities for actuation
+     */
+    Eigen::VectorXd VelocityControl(float Kp, float Ki, Eigen::VectorXd currentAngles, Eigen::VectorXd desiredAngles, float dt, Eigen::VectorXd feedforward = Eigen::VectorXd::Zero(6));
 
 private:
     float r1;

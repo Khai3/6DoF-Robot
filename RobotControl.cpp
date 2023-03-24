@@ -40,26 +40,26 @@ Eigen::Matrix4d Robot::ForwardKinematics(const Eigen::VectorXd &theta)
     Eigen::Matrix4d exp6 = mr::MatrixExp6(mr::VecTose3(S6*theta(5)));
 
     // Calculate end effector pose using exponential coordinates and the robot's home configuration
-    Eigen::Matrix4d end_pose = exp1 * exp2 * exp3 * exp4 * exp5 * exp6 * M;
-    return (end_pose);
+    Eigen::Matrix4d endPose = exp1 * exp2 * exp3 * exp4 * exp5 * exp6 * M;
+    return (endPose);
 }
 
-Eigen::VectorXd Robot::InverseKinematics(Eigen::Matrix4d end_pose)
+Eigen::VectorXd Robot::InverseKinematics(Eigen::Matrix4d endPose)
 {
     // Calculate wrist center
-    Eigen::Vector3d end_position = end_pose.block<3,1>(0,3);
-    Eigen::Vector3d z_axis = end_pose.block<3,1>(0,2);
+    Eigen::Vector3d end_position = endPose.block<3,1>(0,3);
+    Eigen::Vector3d z_axis = endPose.block<3,1>(0,2);
     Eigen::Vector3d wrist_center = end_position - (z_axis * d6);
 
     // Calculate desired joint angles of robot analytically
-    Eigen::VectorXd joint_angles(6);
+    Eigen::VectorXd jointAngles(6);
     float px,py,pz;
     px =  wrist_center[0]; 
     py = wrist_center[1];
     pz = wrist_center[2];
 
     // Joint 1
-    joint_angles[0] = std::atan2(py, px);
+    jointAngles[0] = std::atan2(py, px);
 
     // Joint 2
     float l,h,p,br3,cos_b;
@@ -68,62 +68,78 @@ Eigen::VectorXd Robot::InverseKinematics(Eigen::Matrix4d end_pose)
     p = std::sqrt(h*h + l*l);
     br3 = std::sqrt(r3*r3+d4*d4);
     cos_b = (p*p + r2*r2 - br3*br3) / (2*p*r2); 
-    joint_angles[1] = std::atan2(h, l) + std::atan2(std::sqrt(1-cos_b*cos_b),cos_b) - PI/2;
+    jointAngles[1] = std::atan2(h, l) + std::atan2(std::sqrt(1-cos_b*cos_b),cos_b) - PI/2;
 
     // Joint 3
     float cos_v,d;
     cos_v = (r2*r2 + br3*br3 - p*p) / (2*r2*br3);
     d = std::atan2(d4,r3);
-    joint_angles[2] = std::atan2(std::sqrt(1-cos_v*cos_v),cos_v) + d - PI; 
+    jointAngles[2] = std::atan2(std::sqrt(1-cos_v*cos_v),cos_v) + d - PI; 
 
     // Joint 4,5 & 6
-    Eigen::Matrix4d expN1 = mr::MatrixExp6(mr::VecTose3((-S1)*joint_angles[0]));
-    Eigen::Matrix4d expN2 = mr::MatrixExp6(mr::VecTose3((-S2)*joint_angles[1]));
-    Eigen::Matrix4d expN3 = mr::MatrixExp6(mr::VecTose3((-S3)*joint_angles[2]));
-    Eigen::Matrix4d R = expN3 * expN2 * expN1 * end_pose * M.inverse(); 
+    Eigen::Matrix4d expN1 = mr::MatrixExp6(mr::VecTose3((-S1)*jointAngles[0]));
+    Eigen::Matrix4d expN2 = mr::MatrixExp6(mr::VecTose3((-S2)*jointAngles[1]));
+    Eigen::Matrix4d expN3 = mr::MatrixExp6(mr::VecTose3((-S3)*jointAngles[2]));
+    Eigen::Matrix4d R = expN3 * expN2 * expN1 * endPose * M.inverse(); 
 
-    joint_angles[3] = std::atan2(-R(1,0),R(2,0));
-    joint_angles[4] = std::atan2((std::sqrt(R(0,1)*R(0,1) + R(0,2)*R(0,2))), R(0,0));
-    joint_angles[5] = std::atan2(-R(0,1),-R(0,2));
+    jointAngles[3] = std::atan2(-R(1,0),R(2,0));
+    jointAngles[4] = std::atan2((std::sqrt(R(0,1)*R(0,1) + R(0,2)*R(0,2))), R(0,0));
+    jointAngles[5] = std::atan2(-R(0,1),-R(0,2));
 
-    return joint_angles;
+    return jointAngles;
 }
 
 float Robot::CubicTimeScaling(float t,float Tf)
 {
-    float time_ratio = t/Tf;
-    float time_scale = 3*std::pow(time_ratio,2) - 2*std::pow(time_ratio,3);
-    return time_scale;
+    float timeRatio = t/Tf;
+    float timeScale = 3*std::pow(timeRatio,2) - 2*std::pow(timeRatio,3);
+    return timeScale;
+}
+
+float Robot::CubicTimeScalingDot(float t,float Tf)
+{  
+    float timeScaleDot = 6*t/std::pow(Tf,2) - 6*std::pow(t,2)/std::pow(Tf,3);
+    return timeScaleDot;
 }
 
 float Robot::QuinticTimeScaling(float t,float Tf)
 {
-    float time_ratio = t/Tf;
-    float time_scale = 10*std::pow(time_ratio, 3) - 15*std::pow(time_ratio, 4) + 6*std::pow(time_ratio, 5);
-    return time_scale;
+    float timeRatio = t/Tf;
+    float timeScale = 10*std::pow(timeRatio,3) - 15*std::pow(timeRatio,4) + 6*std::pow(timeRatio,5);
+    return timeScale;
 }
 
-Eigen::MatrixXd Robot::JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend,const float Tf,const int N, const std::string &method)
+float Robot::QuinticTimeScalingDot(float t,float Tf)
 {
-    Eigen::MatrixXd traj(N,7);
+    float timeScaleDot = 30*std::pow(t,2)/std::pow(Tf, 3) - 60*std::pow(t,3)/std::pow(Tf,4) + 30*std::pow(t,4)/std::pow(Tf,5);
+    return timeScaleDot;
+}
+
+std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> Robot::JointTrajectory(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend,const float Tf,const int N, const std::string &method)
+{
+    std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj;
     for (int i = 0; i < N; i++)
     {
-        float elapsed_time = (float)i/float(N-1) * Tf;
-        float time_scale;
+        float elapsedTime = (float)i/float(N-1) * Tf;
+        float timeScale,timeScaleDot;
 
         // Calculate polynomial time scaling
         if (method == std::string("Cubic"))
         {
-            time_scale = CubicTimeScaling(elapsed_time,Tf);
+            timeScale = CubicTimeScaling(elapsedTime,Tf);
+            timeScaleDot = CubicTimeScalingDot(elapsedTime,Tf);
         }
         else if (method == std::string("Quintic"))
         {
-            time_scale = QuinticTimeScaling(elapsed_time,Tf);
+            timeScale = QuinticTimeScaling(elapsedTime,Tf);
+            timeScaleDot = QuinticTimeScalingDot(elapsedTime,Tf);
         }
         
         // Calculate joint angles for specific elapsed time 
-        Eigen::VectorXd joint_angles = thetastart + time_scale * (thetaend - thetastart);
-        traj.block<1,7>(i,0) << joint_angles.transpose(), elapsed_time;
+        Eigen::VectorXd jointAngles = thetastart + timeScale * (thetaend - thetastart);
+        Eigen::VectorXd jointVelocity = timeScaleDot * (thetaend - thetastart);
+        std::tuple<Eigen::VectorXd, Eigen::VectorXd, float> jointStamped = std::make_tuple(jointAngles,jointVelocity,elapsedTime);
+        traj.push_back(jointStamped);
     }
     return traj;
 }
@@ -133,23 +149,23 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ScrewTrajectory(const Eig
     std::vector<std::tuple<Eigen::Matrix4d, float>> traj;
     for (int i = 0; i < N; i++)
     {
-        float elapsed_time = (float)i/float(N-1) * Tf;
-        float time_scale;
+        float elapsedTime = (float)i/float(N-1) * Tf;
+        float timeScale;
 
         // Calculate polynomial time scaling
         if (method == std::string("Cubic"))
         {
-            time_scale = CubicTimeScaling(elapsed_time,Tf);
+            timeScale = CubicTimeScaling(elapsedTime,Tf);
         }
         else if (method == std::string("Quintic"))
         {
-            time_scale = QuinticTimeScaling(elapsed_time,Tf);
+            timeScale = QuinticTimeScaling(elapsedTime,Tf);
         }
    
         // Calculate SE(3) matrix for specific elapsed time
-        Eigen::Matrix4d transform = Xstart * mr::MatrixExp6(mr::MatrixLog6(Xstart.inverse()*Xend) * time_scale);
-        std::tuple<Eigen::Matrix4d,float> transform_stamped = std::make_tuple(transform,elapsed_time);
-        traj.push_back(transform_stamped);
+        Eigen::Matrix4d transform = Xstart * mr::MatrixExp6(mr::MatrixLog6(Xstart.inverse()*Xend) * timeScale);
+        std::tuple<Eigen::Matrix4d,float> transformStamped = std::make_tuple(transform,elapsedTime);
+        traj.push_back(transformStamped);
     }
     return traj;
 }
@@ -159,33 +175,33 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const
     std::vector<std::tuple<Eigen::Matrix4d, float>> traj ;
 
     // Initialise start & ending positions and rotations
-    Eigen::Vector3d start_pos = Xstart.col(3).head(3);
-    Eigen::Vector3d end_pos = Xend.col(3).head(3);
-    Eigen::Matrix3d start_rot = Xstart.block<3,3>(0,0);
-    Eigen::Matrix3d end_rot = Xend.block<3,3>(0,0);
+    Eigen::Vector3d startPos = Xstart.col(3).head(3);
+    Eigen::Vector3d endPos = Xend.col(3).head(3);
+    Eigen::Matrix3d startRot = Xstart.block<3,3>(0,0);
+    Eigen::Matrix3d endRot = Xend.block<3,3>(0,0);
 
     for (int i = 0; i < N; i++)
     {
-        float elapsed_time = (float)i/float(N-1) * Tf;
-        float time_scale;
+        float elapsedTime = (float)i/float(N-1) * Tf;
+        float timeScale;
 
         // Calculate polynomial time scaling
         if (method == std::string("Cubic"))
         {
-            time_scale = CubicTimeScaling(elapsed_time,Tf);
+            timeScale = CubicTimeScaling(elapsedTime,Tf);
         }
         else if (method == std::string("Quintic"))
         {
-            time_scale = QuinticTimeScaling(elapsed_time,Tf);
+            timeScale = QuinticTimeScaling(elapsedTime,Tf);
         }
    
         // Calculate SE(3) matrix for specific elapsed time
-        Eigen::Vector3d position = start_pos + time_scale * (end_pos - start_pos);
-        Eigen::Matrix3d rotation = start_rot * mr::MatrixExp3(mr::MatrixLog3(start_rot.inverse()*end_rot) * time_scale);
+        Eigen::Vector3d position = startPos + timeScale * (endPos - startPos);
+        Eigen::Matrix3d rotation = startRot * mr::MatrixExp3(mr::MatrixLog3(startRot.inverse()*endRot) * timeScale);
         Eigen::Matrix4d transform; 
         transform << rotation, position, 0, 0, 0, 1;
-        std::tuple<Eigen::Matrix4d,float> transform_stamped = std::make_tuple(transform,elapsed_time);
-        traj.push_back(transform_stamped);
+        std::tuple<Eigen::Matrix4d,float> transformStamped = std::make_tuple(transform,elapsedTime);
+        traj.push_back(transformStamped);
     }
     return traj;
 }
@@ -194,46 +210,58 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ViaTrajectory(const std::
 {
     std::vector<std::tuple<Eigen::Matrix4d, float>> traj ;
     int length = points.size();
-    float timegap = Tf/(length-1);
+    float timeGap = Tf/(length-1);
 
     // Calculate heuristic for velocity
     float dist = 0.0;
-    for (int i = 0; i < points.size() - 1; i++) 
+    for (int i = 0; i < length - 1; i++) 
     {
         dist += (points[i] - points[i+1]).norm();  // Compute total euclidean distance
     }
-    Eigen::Vector3d v;
-    v.setConstant(dist/Tf);
+    double speed = (dist/(Tf));
 
     for (int i = 0; i < length-1; i++)
     {
-        // Calculate cubic polynomial between via points i and i+1 for position 
-        // Eigen::Matrix4d mat1,mat2 = points[i], points[i+1];
-        Eigen::Matrix4d mat1 = points[i],              mat2 = points[i+1];
-        Eigen::Vector3d pos1 = mat1.col(3).head(3),    pos2 = mat2.col(3).head(3);
-        Eigen::Matrix3d rot1 = mat1.block<3,3>(0,0),   rot2 = mat2.block<3,3>(0,0);
-        Eigen::Vector3d vel1 = (i == 0) ? Eigen::Vector3d::Zero() : v;
-        Eigen::Vector3d vel2 = (i+1 == length) ? Eigen::Vector3d::Zero() : v;
+        // Calculate cubic polynomial between via points i and i+1 for position. 
+        Eigen::Matrix4d mat1 = points[i],             mat2 = points[i+1];
+        Eigen::Vector3d pos1 = mat1.col(3).head(3),   pos2 = mat2.col(3).head(3),   pos3 = points[i+2].col(3).head(3);     
+        Eigen::Matrix3d rot1 = mat1.block<3,3>(0,0),  rot2 = mat2.block<3,3>(0,0);
+        Eigen::Vector3d vel1,vel2;
+        vel1 = (i == 0) ? Eigen::Vector3d::Zero() : vel2;
+        vel2 = (i+1 == length-1) ? Eigen::Vector3d::Zero() : (pos3-pos2).normalized();
+        // vel2 *= speed;
 
         Eigen::Vector3d a0 = pos1;
         Eigen::Vector3d a1 = vel1;
-        Eigen::Vector3d a2 = (3*pos2 - 3*pos1 - 2*vel1*timegap - vel2*timegap)/(timegap*timegap);
-        Eigen::Vector3d a3 = (2*pos1 + (vel1+vel2)*timegap - 2*pos2) / std::pow(timegap,3);
+        Eigen::Vector3d a2 = (3*pos2 - 3*pos1 - 2*vel1*timeGap - vel2*timeGap)/(timeGap*timeGap);
+        Eigen::Vector3d a3 = (2*pos1 + (vel1+vel2)*timeGap - 2*pos2) / std::pow(timeGap,3);
 
         for (int j = 0; j < N; j++)
         {
-            float delta_t = (float)j/float(N-1) * timegap; 
+            float delta_t = (float)j/float(N-1) * timeGap; 
             Eigen::Vector3d position = a0 + a1*delta_t + a2*std::pow(delta_t,2) + a3*std::pow(delta_t,3);
 
             // Use cubic time scaling for rotation
-            float time_scale = CubicTimeScaling(delta_t,timegap);
-            Eigen::Matrix3d rotation = rot1 * mr::MatrixExp3(mr::MatrixLog3(rot1.inverse()*rot2) * time_scale);
+            float timeScale = CubicTimeScaling(delta_t,timeGap);
+            Eigen::Matrix3d rotation = rot1 * mr::MatrixExp3(mr::MatrixLog3(rot1.inverse()*rot2) * timeScale);
             
             Eigen::Matrix4d transform; 
             transform << rotation, position, 0, 0, 0, 1;
-            std::tuple<Eigen::Matrix4d,float> transform_stamped = std::make_tuple(transform, (timegap*i + delta_t));
-            traj.push_back(transform_stamped);
+            std::tuple<Eigen::Matrix4d,float> transformStamped = std::make_tuple(transform, (timeGap*i + delta_t));
+            traj.push_back(transformStamped);
         }
     }
     return traj;
+}
+
+Eigen::VectorXd VelocityControl(float Kp,float Ki, Eigen::VectorXd currentAngles, Eigen::VectorXd desiredAngles, float dt, Eigen::VectorXd feedforward = Eigen::VectorXd::Zero(6))
+{
+    Eigen::MatrixXd Kp = Eigen::MatrixXd::Identity(6, 6) * Kp;
+    Eigen::MatrixXd Ki = Eigen::MatrixXd::Identity(6, 6) * Ki;
+    Eigen::VectorXd error = desiredAngles - currentAngles;
+    static Eigen::VectorXd errorInt = Eigen::VectorXd::Zero(6);
+    errorInt += error*dt;
+
+    Eigen::VectorXd jointVelocity = feedforward + Kp*error + Ki*errorInt;
+    return jointVelocity;
 }

@@ -10,13 +10,14 @@ RemoteAPIClient client;
 auto sim = client.getObject().sim();
 Robot ArmBot;
 std::vector<int> markers;
+Eigen::Vector3d prevPos = Eigen::Vector3d::Zero();
 
-auto joint1 = sim.getObject("/Joint_1");
-auto joint2 = sim.getObject("/Joint_2");
-auto joint3 = sim.getObject("/Joint_3");
-auto joint4 = sim.getObject("/Joint_4");
-auto joint5 = sim.getObject("/Joint_5");
-auto joint6 = sim.getObject("/Joint_6");
+int joint1 = sim.getObject("/Joint_1");
+int joint2 = sim.getObject("/Joint_2");
+int joint3 = sim.getObject("/Joint_3");
+int joint4 = sim.getObject("/Joint_4");
+int joint5 = sim.getObject("/Joint_5");
+int joint6 = sim.getObject("/Joint_6");
 
 //=================
 // Helper Functions
@@ -46,25 +47,7 @@ void stepToRest()
     }
 }
 
-void trackTransformStamped(const std::vector<std::tuple<Eigen::Matrix4d, float>> traj)
-{
-    // Set the end effector transformation in the simulation as specified in the trajectory input 
-    const float start_time = sim.getSimulationTime(); 
-    for (const auto& transform_stamped : traj) {
-        Eigen::MatrixXd transform = std::get<0>(transform_stamped);
-        float elapsed_time = std::get<1>(transform_stamped) + start_time;
-        while (true) {
-            client.step(); 
-            if (sim.getSimulationTime() > elapsed_time) {
-                Eigen::VectorXd theta = ArmBot.InverseKinematics(transform);
-                setJointPos(theta);
-                break;
-            }
-        }
-    }
-}
-
-void markPoints(const std::vector<Eigen::Matrix4d> transformList)
+void markPoints(const std::vector<Eigen::Matrix4d> transformList, const double rad = 0.02)
 {
     // Remove existing markers
     for (const int marker : markers){
@@ -78,7 +61,7 @@ void markPoints(const std::vector<Eigen::Matrix4d> transformList)
         Eigen::Vector3d point = transform.col(3).head(3);
 
         // get a handle to the sphere object
-        std::vector<double> radius(3, 0.02);
+        std::vector<double> radius(3, rad);
         int sphereHandle = sim.createPrimitiveShape(sim.primitiveshape_spheroid, radius);
         markers.push_back(sphereHandle);
         // set the sphere's position
@@ -86,8 +69,65 @@ void markPoints(const std::vector<Eigen::Matrix4d> transformList)
         std::vector<double> spherePos = {point[0]/scale, point[1]/scale, point[2]/scale};
         sim.setObjectPosition(sphereHandle, -1, spherePos);
         // set the sphere's color
-        std::vector<double> sphereColor = {1.0, 0.0, 0.0};
+        std::vector<double> sphereColor = {1.0, 0.3, 0.1};
         sim.setShapeColor(sphereHandle,"",sim.colorcomponent_ambient_diffuse, sphereColor);
+    }
+}
+
+void markTrail(int object, const double rad = 0.005, const float gap = 0.005)
+{   
+    std::vector<double> p = sim.getObjectPosition(object,sim.handle_world);
+    Eigen::Vector3d pos = Eigen::Map<Eigen::Vector3d>(p.data());
+    // std::cout << pos << std::endl;
+    if ((pos - prevPos).norm() > gap)
+    {
+        // get a handle to the sphere object
+        std::vector<double> radius(3, rad);
+        int sphereHandle = sim.createPrimitiveShape(sim.primitiveshape_spheroid, radius);
+        // set the sphere's position
+        std::vector<double> spherePos = {pos[0], pos[1], pos[2]};
+        sim.setObjectPosition(sphereHandle, -1, spherePos);
+        // set the sphere's color
+        std::vector<double> sphereColor = {1.0, 0.3, 0.1};
+        sim.setShapeColor(sphereHandle,"",sim.colorcomponent_ambient_diffuse, sphereColor);
+
+        prevPos = pos;
+    } 
+}
+
+void trackJointStamped(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj)
+{
+    // Set the joint angles in the simulation as specified in the trajectory input 
+    const float start_time = sim.getSimulationTime(); 
+    for (const auto& jointStamped : traj) {
+        Eigen::MatrixXd theta = std::get<0>(jointStamped);
+        float elapsed_time = std::get<2>(jointStamped) + start_time;
+        while (true) {
+            client.step(); 
+            if (sim.getSimulationTime() > elapsed_time) {
+                setJointPos(theta);
+                break;
+            }
+        }
+    }
+}
+
+void trackTransformStamped(const std::vector<std::tuple<Eigen::Matrix4d, float>> traj, const bool mark = false)
+{
+    // Set the end effector transformation in the simulation as specified in the trajectory input 
+    const float start_time = sim.getSimulationTime(); 
+    for (const auto& transform_stamped : traj) {
+        Eigen::MatrixXd transform = std::get<0>(transform_stamped);
+        float elapsed_time = std::get<1>(transform_stamped) + start_time;
+        while (true) {
+            client.step(); 
+            if (sim.getSimulationTime() > elapsed_time) {
+                Eigen::VectorXd theta = ArmBot.InverseKinematics(transform);
+                setJointPos(theta);
+                break;
+            }
+            if (mark) { markTrail(joint6); }
+        }
     }
 }
 
@@ -112,22 +152,18 @@ void IKSim(Eigen::Matrix4d endpose)
 
 void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, const float Tf, const int N, const std::string &method)
 {
-    Eigen::MatrixXd traj = ArmBot.JointTrajectory(thetastart,thetaend,Tf,N,method);
-    Eigen::VectorXd elapsed_time = traj.col(6);
+    std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj = ArmBot.JointTrajectory(thetastart,thetaend,Tf,N,method);
+
     client.setStepping(true);
     sim.startSimulation();
-    elapsed_time.array() += sim.getSimulationTime();
+    
+    // if (control == std::string("Velocity")){
+        
+    // }
+    // else if (control == std::string("Torque")){
 
-    for (int i = 0; i < N; i++) {
-        while (true) {
-            client.step();  
-            if (sim.getSimulationTime() > elapsed_time(i)){
-                Eigen::VectorXd theta = traj.row(i);
-                setJointPos(theta);
-                break;
-            }
-        }
-    }
+    // }
+    // else{ trackJointStamped(traj);}
     stepToRest();
 }
 
@@ -156,12 +192,13 @@ void ViaTraj(const std::vector<Eigen::Matrix4d> points, const float Tf, const in
     sim.startSimulation();
     
     if (mark) { markPoints(points); }
-    trackTransformStamped(traj);
+    trackTransformStamped(traj,false);
     stepToRest();
 }
 
 int main(int argc, char *argv[])
-{   
+{  
+    // Basic joints and end effector configuration inputs 
     Eigen::VectorXd thetaend(6),thetastart(6);
     thetastart << 0,0,0,0,0,0;
     thetaend << -110*PI/180,
@@ -222,22 +259,27 @@ int main(int argc, char *argv[])
 
     else if (argv[1] == std::string("ViaTraj"))
     {
-        float Tf = 7;
-        int N = 5;
-        Eigen::Matrix4d point1,point2,point3;
+        float Tf = 8;
+        int N = 20;
+        Eigen::Matrix4d point1,point2,point3,point4;
         point1 << 0,0,1,120,
                   1,0,0,-221.5,
-                  0,1,0,112.424,
+                  0,1,0,130,
                   0,0,0,1;
-        point2 << 0,0,1,50,
+        point2 << 0,0,1,70,
                   1,0,0,-221.5,
-                  0,1,0,200,
+                  0,1,0,270,
                   0,0,0,1;
-        point3 << 0,0,1,-30,
+        point3 << 0,0,1,20,
                   1,0,0,-221.5,
-                  0,1,0,200,
+                  0,1,0,130,
                   0,0,0,1;
-        std::vector<Eigen::Matrix4d> points = {Xstart, point1, point2, point3, Xend};
+        point4 << 0,0,1,-30,
+                  1,0,0,-221.5,
+                  0,1,0,270,
+                  0,0,0,1;
+        Xend(2,3) = 130;
+        std::vector<Eigen::Matrix4d> points = {Xstart, point1, point2, point3, point4, Xend};
         ViaTraj(points,Tf,N,true);
     }
     return 0;
