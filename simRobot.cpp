@@ -33,6 +33,29 @@ void setJointPos(const Eigen::VectorXd &theta)
     sim.setJointTargetPosition(joint6,theta(5));
 }
 
+void setJointVel(const Eigen::VectorXd vel) 
+{
+    sim.setJointTargetVelocity(joint1,vel(0));
+    sim.setJointTargetVelocity(joint2,vel(1));
+    sim.setJointTargetVelocity(joint3,vel(2));
+    sim.setJointTargetVelocity(joint4,vel(3));
+    sim.setJointTargetVelocity(joint5,vel(4));
+    sim.setJointTargetVelocity(joint6,vel(5));
+}
+
+Eigen::VectorXd getJointVel()
+{
+    float vel1 = sim.getJointVelocity(joint1);
+    float vel2 = sim.getJointVelocity(joint2);
+    float vel3 = sim.getJointVelocity(joint3);
+    float vel4 = sim.getJointVelocity(joint4);
+    float vel5 = sim.getJointVelocity(joint5);
+    float vel6 = sim.getJointVelocity(joint6);
+    Eigen::VectorXd currentTheta(6); 
+    currentTheta << vel1,vel2,vel3,vel4,vel5,vel6;
+    return currentTheta;
+}
+
 void stepToRest()
 {   
     // Step client simulation until end effector is at rest
@@ -98,13 +121,13 @@ void markTrail(int object, const double rad = 0.005, const float gap = 0.005)
 void trackJointStamped(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj)
 {
     // Set the joint angles in the simulation as specified in the trajectory input 
-    const float start_time = sim.getSimulationTime(); 
+    const float startTime = sim.getSimulationTime(); 
     for (const auto& jointStamped : traj) {
-        Eigen::MatrixXd theta = std::get<0>(jointStamped);
-        float elapsed_time = std::get<2>(jointStamped) + start_time;
+        Eigen::VectorXd theta = std::get<0>(jointStamped);
+        float elapsedTime = std::get<2>(jointStamped) + startTime;
         while (true) {
             client.step(); 
-            if (sim.getSimulationTime() > elapsed_time) {
+            if (sim.getSimulationTime() > elapsedTime) {
                 setJointPos(theta);
                 break;
             }
@@ -115,13 +138,13 @@ void trackJointStamped(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, 
 void trackTransformStamped(const std::vector<std::tuple<Eigen::Matrix4d, float>> traj, const bool mark = false)
 {
     // Set the end effector transformation in the simulation as specified in the trajectory input 
-    const float start_time = sim.getSimulationTime(); 
+    const float startTime = sim.getSimulationTime(); 
     for (const auto& transform_stamped : traj) {
         Eigen::MatrixXd transform = std::get<0>(transform_stamped);
-        float elapsed_time = std::get<1>(transform_stamped) + start_time;
+        float elapsedTime = std::get<1>(transform_stamped) + startTime;
         while (true) {
             client.step(); 
-            if (sim.getSimulationTime() > elapsed_time) {
+            if (sim.getSimulationTime() > elapsedTime) {
                 Eigen::VectorXd theta = ArmBot.InverseKinematics(transform);
                 setJointPos(theta);
                 break;
@@ -129,6 +152,25 @@ void trackTransformStamped(const std::vector<std::tuple<Eigen::Matrix4d, float>>
             if (mark) { markTrail(joint6); }
         }
     }
+}
+
+void JointVelControl(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj,float Kp, float Ki)
+{
+    const float startTime = sim.getSimulationTime(); 
+        for (const auto& jointStamped : traj) {
+            Eigen::VectorXd thetaTarget = std::get<0>(jointStamped);
+            Eigen::VectorXd thetaDot = std::get<1>(jointStamped);
+            float elapsedTime = std::get<2>(jointStamped) + startTime;
+            while (true) {
+                client.step(); 
+                Eigen::VectorXd currentTheta = getJointVel();
+                Eigen::VectorXd jointVel = ArmBot.VelocityControl(Kp, Ki, currentTheta, thetaTarget, sim.getSimulationTimeStep, thetaDot);
+                setJointVel(jointVel);
+                if (sim.getSimulationTime() > elapsedTime) {
+                    break;
+                }
+            }
+        }
 }
 
 //=================
@@ -150,20 +192,18 @@ void IKSim(Eigen::Matrix4d endpose)
     setJointPos(theta);    
 }
 
-void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, const float Tf, const int N, const std::string &method)
+void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, const float Tf, const int N, const std::string &method, const std::string &control)
 {
     std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj = ArmBot.JointTrajectory(thetastart,thetaend,Tf,N,method);
-
     client.setStepping(true);
     sim.startSimulation();
     
-    // if (control == std::string("Velocity")){
-        
-    // }
-    // else if (control == std::string("Torque")){
-
-    // }
-    // else{ trackJointStamped(traj);}
+    if (control == std::string("Velocity")){
+        float Kp = 1;
+        float Ki = 0.5;
+        JointVelControl(traj,Kp,Ki);
+    }
+    else{ trackJointStamped(traj);}
     stepToRest();
 }
 
