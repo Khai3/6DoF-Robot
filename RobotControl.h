@@ -128,7 +128,7 @@ public:
      *              and feedforward control
      * Output: The vector of joint velocities for actuation
      */
-    Eigen::VectorXd VelocityControl(float Kp, float Ki, Eigen::VectorXd currentAngles, Eigen::VectorXd desiredAngles, float dt, Eigen::VectorXd feedforward = Eigen::VectorXd::Zero(6));
+    Eigen::VectorXd VelocityControl(const float Kp, const float Ki, const Eigen::VectorXd currentAngles, const Eigen::VectorXd desiredAngles, const float dt, const Eigen::VectorXd feedforward = Eigen::VectorXd::Zero(6));
 
 private:
     float r1;

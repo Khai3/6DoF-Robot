@@ -18,6 +18,7 @@ int joint3 = sim.getObject("/Joint_3");
 int joint4 = sim.getObject("/Joint_4");
 int joint5 = sim.getObject("/Joint_5");
 int joint6 = sim.getObject("/Joint_6");
+int jointList[] = {joint1,joint2,joint3,joint4,joint5,joint6};
 
 //=================
 // Helper Functions
@@ -25,35 +26,38 @@ int joint6 = sim.getObject("/Joint_6");
 
 void setJointPos(const Eigen::VectorXd &theta) 
 {
-    sim.setJointTargetPosition(joint1,theta(0));
-    sim.setJointTargetPosition(joint2,theta(1));
-    sim.setJointTargetPosition(joint3,theta(2));
-    sim.setJointTargetPosition(joint4,theta(3));
-    sim.setJointTargetPosition(joint5,theta(4));
-    sim.setJointTargetPosition(joint6,theta(5));
+    for (int i = 0; i < sizeof(jointList)/sizeof(int); i++){
+        sim.setJointTargetPosition(jointList[i],theta[i]);
+    }
 }
 
 void setJointVel(const Eigen::VectorXd vel) 
 {
-    sim.setJointTargetVelocity(joint1,vel(0));
-    sim.setJointTargetVelocity(joint2,vel(1));
-    sim.setJointTargetVelocity(joint3,vel(2));
-    sim.setJointTargetVelocity(joint4,vel(3));
-    sim.setJointTargetVelocity(joint5,vel(4));
-    sim.setJointTargetVelocity(joint6,vel(5));
+    for (int i = 0; i < sizeof(jointList)/sizeof(int); i++){
+        sim.setJointTargetVelocity(jointList[i],vel[i]);
+    }
 }
 
-Eigen::VectorXd getJointVel()
+Eigen::VectorXd getJointPos()
 {
-    float vel1 = sim.getJointVelocity(joint1);
-    float vel2 = sim.getJointVelocity(joint2);
-    float vel3 = sim.getJointVelocity(joint3);
-    float vel4 = sim.getJointVelocity(joint4);
-    float vel5 = sim.getJointVelocity(joint5);
-    float vel6 = sim.getJointVelocity(joint6);
-    Eigen::VectorXd currentTheta(6); 
-    currentTheta << vel1,vel2,vel3,vel4,vel5,vel6;
+    Eigen::VectorXd currentTheta(6);
+    for (int i = 0; i < sizeof(jointList)/sizeof(int); i++){
+        currentTheta[i] = sim.getJointPosition(jointList[i]);
+    }
     return currentTheta;
+}
+
+void setControlMode(const std::string control)
+{
+    int mode;
+    if (control == std::string("Velocity")) { 
+        mode = sim.jointdynctrl_velocity; }
+    else if (control == std::string("Torque")) { 
+        mode = sim.jointdynctrl_force; }
+
+    for (int i = 0; i < sizeof(jointList)/sizeof(int); i++){
+        sim.setObjectInt32Param(jointList[i], sim.jointintparam_dynctrlmode, mode);
+    }
 }
 
 void stepToRest()
@@ -156,6 +160,7 @@ void trackTransformStamped(const std::vector<std::tuple<Eigen::Matrix4d, float>>
 
 void JointVelControl(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj,float Kp, float Ki)
 {
+    setControlMode("Velocity");
     const float startTime = sim.getSimulationTime(); 
         for (const auto& jointStamped : traj) {
             Eigen::VectorXd thetaTarget = std::get<0>(jointStamped);
@@ -163,8 +168,8 @@ void JointVelControl(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, fl
             float elapsedTime = std::get<2>(jointStamped) + startTime;
             while (true) {
                 client.step(); 
-                Eigen::VectorXd currentTheta = getJointVel();
-                Eigen::VectorXd jointVel = ArmBot.VelocityControl(Kp, Ki, currentTheta, thetaTarget, sim.getSimulationTimeStep, thetaDot);
+                Eigen::VectorXd currentTheta = getJointPos();
+                Eigen::VectorXd jointVel = ArmBot.VelocityControl(Kp, Ki, currentTheta, thetaTarget, sim.getSimulationTimeStep(), thetaDot);
                 setJointVel(jointVel);
                 if (sim.getSimulationTime() > elapsedTime) {
                     break;
@@ -192,15 +197,13 @@ void IKSim(Eigen::Matrix4d endpose)
     setJointPos(theta);    
 }
 
-void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, const float Tf, const int N, const std::string &method, const std::string &control)
+void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, const float Tf, const int N, const std::string &method, const std::string &control, const float Kp = 10, const float Ki = 1)
 {
     std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj = ArmBot.JointTrajectory(thetastart,thetaend,Tf,N,method);
     client.setStepping(true);
     sim.startSimulation();
     
-    if (control == std::string("Velocity")){
-        float Kp = 1;
-        float Ki = 0.5;
+    if (control == std::string("VelocityCtrl")){
         JointVelControl(traj,Kp,Ki);
     }
     else{ trackJointStamped(traj);}
@@ -274,9 +277,11 @@ int main(int argc, char *argv[])
     {
         float Tf = 3;
         int N = 20;
-        TrajSim(thetastart,thetaend,Tf,N,"Quintic");
+        float Kp = 10;
+        float Ki = 0.5;
+        TrajSim(thetastart,thetaend,Tf,N,"Quintic","VelocityCtrl",Kp,Ki);
         sleep(1);
-        TrajSim(thetaend,thetastart,Tf,N,"Quintic");
+        TrajSim(thetaend,thetastart,Tf,N,"Quintic","VelocityCtrl",Kp,Ki);
     }
 
     else if (argv[1] == std::string("ScrewTraj"))

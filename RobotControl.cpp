@@ -254,14 +254,14 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ViaTrajectory(const std::
     return traj;
 }
 
-Eigen::VectorXd VelocityControl(float Kp,float Ki, Eigen::VectorXd currentAngles, Eigen::VectorXd desiredAngles, float dt, Eigen::VectorXd feedforward = Eigen::VectorXd::Zero(6))
+Eigen::VectorXd Robot::VelocityControl(const float Kp, const float Ki, const Eigen::VectorXd currentAngles, const Eigen::VectorXd desiredAngles, const float dt, const Eigen::VectorXd feedforward)
 {
-    Eigen::MatrixXd Kp = Eigen::MatrixXd::Identity(6, 6) * Kp;
-    Eigen::MatrixXd Ki = Eigen::MatrixXd::Identity(6, 6) * Ki;
+    Eigen::MatrixXd matKp = Eigen::MatrixXd::Identity(6, 6) * Kp;
+    Eigen::MatrixXd matKi = Eigen::MatrixXd::Identity(6, 6) * Ki;
     Eigen::VectorXd error = desiredAngles - currentAngles;
     static Eigen::VectorXd errorInt = Eigen::VectorXd::Zero(6);
     errorInt += error*dt;
 
-    Eigen::VectorXd jointVelocity = feedforward + Kp*error + Ki*errorInt;
+    Eigen::VectorXd jointVelocity = feedforward + matKp*error + matKi*errorInt;
     return jointVelocity;
 }
