@@ -23,7 +23,9 @@ public:
      * Description: Calculate desired joint angles analytically given an end effector pose
      * Output: An array of joint angle values
      */
-    Eigen::VectorXd InverseKinematics(Eigen::Matrix4d end_pose);
+    Eigen::VectorXd InverseKinematics(const Eigen::Matrix4d &end_pose);
+
+    Eigen::VectorXd SpaceJacobian(const Eigen::VectorXd &theta);
 
     /* Inputs:
      *   t : The current time t satisfying 0 < t < Tf
@@ -115,7 +117,7 @@ public:
      * Output: The discretized trajectory as a list of tuples of N matrices in SE(3)
      *         and elapsed time.
      */
-    std::vector<std::tuple<Eigen::Matrix4d, float>> ViaTrajectory(const std::vector<Eigen::Matrix4d> points, float Tf, int N);
+    std::vector<std::tuple<Eigen::Matrix4d, float>> ViaTrajectory(const std::vector<Eigen::Matrix4d> &points, float Tf, int N);
 
     /* Inputs: 
      *   Kp           : Proportional Gain Value
@@ -128,7 +130,9 @@ public:
      *              and feedforward control
      * Output: The vector of joint velocities for actuation
      */
-    Eigen::VectorXd VelocityControl(const float Kp, const float Ki, const Eigen::VectorXd currentAngles, const Eigen::VectorXd desiredAngles, const float dt, const Eigen::VectorXd feedforward = Eigen::VectorXd::Zero(6));
+    Eigen::VectorXd VelocityControl(const float Kp, const float Ki, const Eigen::VectorXd &currentAngles, const Eigen::VectorXd &desiredAngles, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
+
+    Eigen::VectorXd VelocityEndControl(const float Kp, const float Ki, const Eigen::MatrixXd &currentX, const Eigen::MatrixXd &desiredX, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
 
 private:
     float r1;

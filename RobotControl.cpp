@@ -44,7 +44,7 @@ Eigen::Matrix4d Robot::ForwardKinematics(const Eigen::VectorXd &theta)
     return (endPose);
 }
 
-Eigen::VectorXd Robot::InverseKinematics(Eigen::Matrix4d endPose)
+Eigen::VectorXd Robot::InverseKinematics(const Eigen::Matrix4d &endPose)
 {
     // Calculate wrist center
     Eigen::Vector3d end_position = endPose.block<3,1>(0,3);
@@ -87,6 +87,19 @@ Eigen::VectorXd Robot::InverseKinematics(Eigen::Matrix4d endPose)
     jointAngles[5] = std::atan2(-R(0,1),-R(0,2));
 
     return jointAngles;
+}
+
+Eigen::VectorXd SpaceJacobian(const Eigen::VectorXd &theta)
+{
+    Eigen::MatrixXd jacobian(6,6);
+    Eigen::VectorXd screwAxes[] = {S1,S2,S3,S4,S5,S6};
+    Eigen::MatrixXd T = Eigen::MatrixXd::Identity(6, 6);;
+    for (int i = 0; i < 6; i++) {
+        if (i > 0){
+            T *= mr::MatrixExp6(mr::VecTose3(screwAxes[i-1]*theta(i-1)));
+        }
+        jacobian.col(i) = mr::Adjoint(T) * screwAxes[i];
+    }
 }
 
 float Robot::CubicTimeScaling(float t,float Tf)
@@ -206,7 +219,7 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::CartesianTrajectory(const
     return traj;
 }
 
-std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ViaTrajectory(const std::vector<Eigen::Matrix4d> points, float Tf, int N)
+std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ViaTrajectory(const std::vector<Eigen::Matrix4d> &points, float Tf, int N)
 {
     std::vector<std::tuple<Eigen::Matrix4d, float>> traj ;
     int length = points.size();
@@ -254,7 +267,7 @@ std::vector<std::tuple<Eigen::Matrix4d, float>> Robot::ViaTrajectory(const std::
     return traj;
 }
 
-Eigen::VectorXd Robot::VelocityControl(const float Kp, const float Ki, const Eigen::VectorXd currentAngles, const Eigen::VectorXd desiredAngles, const float dt, const Eigen::VectorXd feedforward)
+Eigen::VectorXd Robot::VelocityControl(const float Kp, const float Ki, const Eigen::VectorXd &currentAngles, const Eigen::VectorXd &desiredAngles, const float dt, const Eigen::VectorXd &feedforward)
 {
     Eigen::MatrixXd matKp = Eigen::MatrixXd::Identity(6, 6) * Kp;
     Eigen::MatrixXd matKi = Eigen::MatrixXd::Identity(6, 6) * Ki;
@@ -264,4 +277,17 @@ Eigen::VectorXd Robot::VelocityControl(const float Kp, const float Ki, const Eig
 
     Eigen::VectorXd jointVelocity = feedforward + matKp*error + matKi*errorInt;
     return jointVelocity;
+}
+
+Eigen::VectorXd VelocityEndControl(const float Kp, const float Ki, const Eigen::MatrixXd &currentX, const Eigen::MatrixXd &desiredX, const float dt, const Eigen::VectorXd &feedforward)
+{
+    Eigen::MatrixXd matKp = Eigen::MatrixXd::Identity(6, 6) * Kp;
+    Eigen::MatrixXd matKi = Eigen::MatrixXd::Identity(6, 6) * Ki;
+    Eigen::MatrixXd matCD = currentX.inverse()*desiredX; 
+    Eigen::VectorXd error = mr::se3ToVec(mr::MatrixLog6(matCD));
+    static Eigen::VectorXd errorInt = Eigen::VectorXd::Zero(6);
+    errorInt += error*dt;
+
+    Eigen::VectorXd twist = mr::Adjoint(matCD)*feedforward + matKp*error + matKi*errorInt;
+    return twist
 }

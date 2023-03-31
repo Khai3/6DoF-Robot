@@ -70,7 +70,9 @@ void stepToRest()
         std::vector<double> angularVel = std::get<1>(vel);
         Eigen::VectorXd linearVelX = Eigen::Map<Eigen::VectorXd>(linearVel.data(), linearVel.size());
         Eigen::VectorXd angularVelX = Eigen::Map<Eigen::VectorXd>(angularVel.data(), angularVel.size());
-        if (linearVelX.norm() == 0 && angularVelX.norm() == 0) { break; }
+        if (linearVelX.norm() < 0.002 && angularVelX.norm() < 0.01) { 
+            break; 
+        }
     }
 }
 
@@ -137,6 +139,7 @@ void trackJointStamped(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, 
             }
         }
     }
+    stepToRest();
 }
 
 void trackTransformStamped(const std::vector<std::tuple<Eigen::Matrix4d, float>> traj, const bool mark = false)
@@ -176,6 +179,7 @@ void JointVelControl(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, fl
                 }
             }
         }
+    stepToRest();
 }
 
 //=================
@@ -224,7 +228,6 @@ void TrajSim(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, const f
 
     // markPoints(std::vector<Eigen::Matrix4d>{Xstart,Xend});
     trackTransformStamped(traj);
-    stepToRest();
 }
 
 void ViaTraj(const std::vector<Eigen::Matrix4d> points, const float Tf, const int N, const bool mark = true)
