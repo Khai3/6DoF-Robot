@@ -89,17 +89,18 @@ Eigen::VectorXd Robot::InverseKinematics(const Eigen::Matrix4d &endPose)
     return jointAngles;
 }
 
-Eigen::VectorXd SpaceJacobian(const Eigen::VectorXd &theta)
+Eigen::MatrixXd Robot::JacobianSpace(const Eigen::VectorXd &theta)
 {
     Eigen::MatrixXd jacobian(6,6);
     Eigen::VectorXd screwAxes[] = {S1,S2,S3,S4,S5,S6};
-    Eigen::MatrixXd T = Eigen::MatrixXd::Identity(6, 6);;
+    Eigen::MatrixXd T = Eigen::MatrixXd::Identity(4, 4);;
     for (int i = 0; i < 6; i++) {
         if (i > 0){
             T *= mr::MatrixExp6(mr::VecTose3(screwAxes[i-1]*theta(i-1)));
         }
         jacobian.col(i) = mr::Adjoint(T) * screwAxes[i];
     }
+    return jacobian;
 }
 
 float Robot::CubicTimeScaling(float t,float Tf)
@@ -279,7 +280,7 @@ Eigen::VectorXd Robot::VelocityControl(const float Kp, const float Ki, const Eig
     return jointVelocity;
 }
 
-Eigen::VectorXd VelocityEndControl(const float Kp, const float Ki, const Eigen::MatrixXd &currentX, const Eigen::MatrixXd &desiredX, const float dt, const Eigen::VectorXd &feedforward)
+Eigen::VectorXd Robot::VelocityEndControl(const float Kp, const float Ki, const Eigen::MatrixXd &currentX, const Eigen::MatrixXd &desiredX, const float dt, const Eigen::VectorXd &feedforward)
 {
     Eigen::MatrixXd matKp = Eigen::MatrixXd::Identity(6, 6) * Kp;
     Eigen::MatrixXd matKi = Eigen::MatrixXd::Identity(6, 6) * Ki;
@@ -289,5 +290,5 @@ Eigen::VectorXd VelocityEndControl(const float Kp, const float Ki, const Eigen::
     errorInt += error*dt;
 
     Eigen::VectorXd twist = mr::Adjoint(matCD)*feedforward + matKp*error + matKi*errorInt;
-    return twist
+    return twist;
 }

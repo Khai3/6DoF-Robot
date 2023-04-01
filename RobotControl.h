@@ -25,7 +25,11 @@ public:
      */
     Eigen::VectorXd InverseKinematics(const Eigen::Matrix4d &end_pose);
 
-    Eigen::VectorXd SpaceJacobian(const Eigen::VectorXd &theta);
+    /* Input: Vector of current joint angles
+     * Description: Calculate the space jacobian given the current joint angles
+     * Output: The space jacobian matrix
+     */
+    Eigen::MatrixXd JacobianSpace(const Eigen::VectorXd &theta);
 
     /* Inputs:
      *   t : The current time t satisfying 0 < t < Tf
@@ -132,6 +136,17 @@ public:
      */
     Eigen::VectorXd VelocityControl(const float Kp, const float Ki, const Eigen::VectorXd &currentAngles, const Eigen::VectorXd &desiredAngles, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
 
+    /* Inputs: 
+     *   Kp         : Proportional Gain Value
+     *   Ki         : Integral Gain Value
+     *   currentX   : Current transformation matrix of robot
+     *   desiredX   : Desired transformation matrix of robot
+     *   dt         : Time step
+     *   feedforward: End effector twist as feedforward control
+     * Description: Compute the required end effector twist of the robot using feedback 
+     *              and feedforward control
+     * Output: The computed end effector twist
+     */
     Eigen::VectorXd VelocityEndControl(const float Kp, const float Ki, const Eigen::MatrixXd &currentX, const Eigen::MatrixXd &desiredX, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
 
 private:
