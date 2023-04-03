@@ -103,6 +103,21 @@ Eigen::MatrixXd Robot::JacobianSpace(const Eigen::VectorXd &theta)
     return jacobian;
 }
 
+Eigen::MatrixXd Robot::JacobianBody(const Eigen::VectorXd &theta)
+{
+    Eigen::MatrixXd jacobian(6,6);
+    Eigen::MatrixXd Ad = mr::Adjoint(M.inverse());
+    Eigen::VectorXd screwBody[] = {Ad*S1, Ad*S2, Ad*S3, Ad*S4, Ad*S5, Ad*S6};
+    Eigen::MatrixXd T = Eigen::MatrixXd::Identity(4, 4);
+    for (int i = 5; i >= 0; i--) {
+        if (i < 5){
+            T *= mr::MatrixExp6(mr::VecTose3(-1 * screwBody[i+1]*theta(i+1)));
+        }
+        jacobian.col(i) = mr::Adjoint(T) * screwBody[i];
+    }
+    return jacobian;
+}
+
 float Robot::CubicTimeScaling(float t,float Tf)
 {
     float timeRatio = t/Tf;

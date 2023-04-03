@@ -31,6 +31,12 @@ public:
      */
     Eigen::MatrixXd JacobianSpace(const Eigen::VectorXd &theta);
 
+    /* Input: Vector of current joint angles
+     * Description: Calculate the body jacobian given the current joint angles
+     * Output: The body jacobian matrix
+     */
+    Eigen::MatrixXd JacobianBody(const Eigen::VectorXd &theta);
+
     /* Inputs:
      *   t : The current time t satisfying 0 < t < Tf
      *   Tf: Total time of the motion in seconds from start to end

@@ -47,6 +47,16 @@ Eigen::VectorXd getJointPos()
     return currentTheta;
 }
 
+Eigen::MatrixXd getObjectTransform(int handle, float scale = 1000)
+{
+    std::vector<double> T = sim.getObjectMatrix(handle, sim.handle_world);
+    Eigen::Map<Eigen::Matrix<double, 3, 4, Eigen::RowMajor>> mat(T.data());
+    mat.col(3) *= scale;
+    Eigen::Matrix4d transform;
+    transform << mat, 0, 0, 0, 1;
+    return transform;
+}
+
 void setControlMode(const std::string control)
 {
     int mode;
@@ -159,6 +169,7 @@ void trackTransformStamped(const std::vector<std::tuple<Eigen::Matrix4d, float>>
             if (mark) { markTrail(joint6); }
         }
     }
+    stepToRest();
 }
 
 void JointVelControl(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj,float Kp, float Ki)
@@ -180,6 +191,28 @@ void JointVelControl(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, fl
             }
         }
     stepToRest();
+}
+
+void EndVelControl(std::vector<std::tuple<Eigen::Matrix4d, float>> traj,float Kp, float Ki)
+{
+    setControlMode("Velocity");
+    const float startTime = sim.getSimulationTime(); 
+        for (const auto& transform_stamped : traj) {
+            Eigen::MatrixXd targetTransform = std::get<0>(transform_stamped);
+            float elapsedTime = std::get<1>(transform_stamped) + startTime;
+            while (true) {
+                client.step(); 
+                Eigen::MatrixXd currentTransform = getObjectTransform(joint6);
+                Eigen::VectorXd twist = ArmBot.VelocityEndControl(Kp, Ki, currentTransform, targetTransform, sim.getSimulationTimeStep());
+                Eigen::MatrixXd jacobian = ArmBot.JacobianBody(getJointPos());
+                Eigen::VectorXd jointVel =  jacobian.inverse() * twist;
+                setJointVel(jointVel);
+                if (sim.getSimulationTime() > elapsedTime) {
+                    break;
+                }
+            }
+        }
+    // stepToRest();
 }
 
 //=================
@@ -211,10 +244,9 @@ void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend,
         JointVelControl(traj,Kp,Ki);
     }
     else{ trackJointStamped(traj);}
-    stepToRest();
 }
 
-void TrajSim(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, const float Tf, const int N, const int path, const std::string &method)
+void TrajSim(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, const float Tf, const int N, const int path, const std::string &method, const std::string &control, const float Kp = 10, const float Ki = 1)
 {
     std::vector<std::tuple<Eigen::Matrix4d, float>> traj;
     if (path == 0){
@@ -227,7 +259,10 @@ void TrajSim(const Eigen::Matrix4d &Xstart, const Eigen::Matrix4d &Xend, const f
     sim.startSimulation();
 
     // markPoints(std::vector<Eigen::Matrix4d>{Xstart,Xend});
-    trackTransformStamped(traj);
+    if (control == std::string("VelocityCtrl")){
+        EndVelControl(traj,Kp,Ki);
+    }
+    else{ trackTransformStamped(traj);}
 }
 
 void ViaTraj(const std::vector<Eigen::Matrix4d> points, const float Tf, const int N, const bool mark = true)
@@ -254,11 +289,11 @@ int main(int argc, char *argv[])
                 90*PI/180,
                 90*PI/180;
 
-    Eigen::Matrix4d Xstart,Xend;
+    Eigen::Matrix4d Xstart,Xend; // units in mm
     Xstart << 0,0,1,192.5,
-           1,0,0,0,
-           0,1,0,269,
-           0,0,0,1;
+              1,0,0,0,
+              0,1,0,269,
+              0,0,0,1;
     Xend << 0.14,-0.94,-0.31,-80.6,
             0.4,0.34,-0.85,-221.5,
             0.91,0,0.42,112.424,
@@ -291,18 +326,22 @@ int main(int argc, char *argv[])
     {
         float Tf = 3;
         int N = 20;
-        TrajSim(Xstart,Xend,Tf,N,0,"Quintic");
+        float Kp = 2;
+        float Ki = 0.3;
+        TrajSim(Xstart,Xend,Tf,N,0,"Quintic","VelocityCtrl",Kp,Ki);
         sleep(1);
-        TrajSim(Xend,Xstart,Tf,N,0,"Quintic");
+        TrajSim(Xend,Xstart,Tf,N,0,"Quintic","VelocityCtrl",Kp,Ki);
     }
 
     else if (argv[1] == std::string("CartesianTraj"))
     {
         float Tf = 3;
         int N = 30;
-        TrajSim(Xstart,Xend,Tf,N,1,"Quintic");
+        float Kp = 10;
+        float Ki = 0.5;
+        TrajSim(Xstart,Xend,Tf,N,1,"Quintic","VelocityCtrl",Kp,Ki);
         sleep(1);
-        TrajSim(Xend,Xstart,Tf,N,1,"Quintic");
+        TrajSim(Xend,Xstart,Tf,N,1,"Quintic","VelocityCtrl",Kp,Ki);
     }
 
     else if (argv[1] == std::string("ViaTraj"))
