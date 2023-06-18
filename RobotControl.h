@@ -155,6 +155,17 @@ public:
      */
     Eigen::VectorXd VelocityEndControl(const float Kp, const float Ki, const Eigen::MatrixXd &currentX, const Eigen::MatrixXd &desiredX, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
 
+        /* Inputs: 
+     *   angles      : Vector of curent angles
+     *   angularVel  : Vector of angular velocities
+     *   angularAccel: Vector of angular acceleration
+     * Description: Compute the torque required to produce a desired motion 
+     * Output: Torque Vector
+     */
+    Eigen::VectorXd InverseDynamics(const Eigen::VectorXd &angles, const Eigen::VectorXd &angularVel, const Eigen::VectorXd &angularAccel);
+
+    Eigen::VectorXd MotionControl(const float Kp, const float Ki, const float Kd, const Eigen::VectorXd &currentAngles, const Eigen::VectorXd &desiredAngles, const Eigen::VectorXd &currentAngularVel, const Eigen::VectorXd &desiredAngularVel, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
+
 private:
     float r1;
     float r2;
@@ -162,7 +173,12 @@ private:
     float d1;
     float d4;
     float d6; 
-    Eigen::Matrix4d M;
+    Eigen::Matrix4d M1;
+    Eigen::Matrix4d M2;
+    Eigen::Matrix4d M3;
+    Eigen::Matrix4d M4;
+    Eigen::Matrix4d M5;
+    Eigen::Matrix4d M6;
     Eigen::VectorXd S1{6};
     Eigen::VectorXd S2{6};
     Eigen::VectorXd S3{6};

@@ -15,10 +15,30 @@ Robot::Robot(float r1_in, float r2_in, float r3_in, float d1_in, float d4_in, fl
     d6(d6_in)
 {   
     // Initialise home configuration of robot
-    M << 0,0,1,r1+d4+d6,
-         1,0,0,0,
-         0,1,0,d1+r2+r3,
-         0,0,0,1;
+    M1 << 0,0,1,0,
+          1,0,0,0,
+          0,1,0,d1/2,
+          0,0,0,1;
+    M2 << 0,0,1,r1,
+          1,0,0,0,
+          0,1,0,d1+r2/2,
+          0,0,0,1;
+    M3 << 0,0,1,r1,
+          1,0,0,0,
+          0,1,0,d1+r2+r3/2,
+          0,0,0,1;
+    M4 << 0,0,1,r1+d4/2,
+          1,0,0,0,
+          0,1,0,d1+r2+r3,
+          0,0,0,1;
+    M5 << 0,0,1,r1+d4+d6/2,
+          1,0,0,0,
+          0,1,0,d1+r2+r3,
+          0,0,0,1;
+    M6 << 0,0,1,r1+d4+d6,
+            1,0,0,0,
+            0,1,0,d1+r2+r3,
+            0,0,0,1;
     
     // Calculate screw axes of the robot joints at its home configuration
     S1 << 0,0,1,0,0,0;  
@@ -40,7 +60,7 @@ Eigen::Matrix4d Robot::ForwardKinematics(const Eigen::VectorXd &theta)
     Eigen::Matrix4d exp6 = mr::MatrixExp6(mr::VecTose3(S6*theta(5)));
 
     // Calculate end effector pose using exponential coordinates and the robot's home configuration
-    Eigen::Matrix4d endPose = exp1 * exp2 * exp3 * exp4 * exp5 * exp6 * M;
+    Eigen::Matrix4d endPose = exp1 * exp2 * exp3 * exp4 * exp5 * exp6 * M6;
     return (endPose);
 }
 
@@ -80,7 +100,7 @@ Eigen::VectorXd Robot::InverseKinematics(const Eigen::Matrix4d &endPose)
     Eigen::Matrix4d expN1 = mr::MatrixExp6(mr::VecTose3((-S1)*jointAngles[0]));
     Eigen::Matrix4d expN2 = mr::MatrixExp6(mr::VecTose3((-S2)*jointAngles[1]));
     Eigen::Matrix4d expN3 = mr::MatrixExp6(mr::VecTose3((-S3)*jointAngles[2]));
-    Eigen::Matrix4d R = expN3 * expN2 * expN1 * endPose * M.inverse(); 
+    Eigen::Matrix4d R = expN3 * expN2 * expN1 * endPose * M6.inverse(); 
 
     jointAngles[3] = std::atan2(-R(1,0),R(2,0));
     jointAngles[4] = std::atan2((std::sqrt(R(0,1)*R(0,1) + R(0,2)*R(0,2))), R(0,0));
@@ -106,7 +126,7 @@ Eigen::MatrixXd Robot::JacobianSpace(const Eigen::VectorXd &theta)
 Eigen::MatrixXd Robot::JacobianBody(const Eigen::VectorXd &theta)
 {
     Eigen::MatrixXd jacobian(6,6);
-    Eigen::MatrixXd Ad = mr::Adjoint(M.inverse());
+    Eigen::MatrixXd Ad = mr::Adjoint(M6.inverse());
     Eigen::VectorXd screwBody[] = {Ad*S1, Ad*S2, Ad*S3, Ad*S4, Ad*S5, Ad*S6};
     Eigen::MatrixXd T = Eigen::MatrixXd::Identity(4, 4);
     for (int i = 5; i >= 0; i--) {
@@ -306,4 +326,68 @@ Eigen::VectorXd Robot::VelocityEndControl(const float Kp, const float Ki, const 
 
     Eigen::VectorXd twist = mr::Adjoint(matCD)*feedforward + matKp*error + matKi*errorInt;
     return twist;
+}
+
+Eigen::VectorXd Robot::InverseDynamics(const Eigen::VectorXd &theta, const Eigen::VectorXd &angularVel, const Eigen::VectorXd &angularAccel)
+{   
+    // Compute MList[]: home configuration of link frames {i-1} in {i} 
+    //         AList[]: screw axes for joint {i} in link frame {i} 
+    //         TList[]: configuration of link frame {i-1} in {i}
+
+    Eigen::MatrixXd M_end = M6;
+    Eigen::MatrixXd M[] = {Eigen::MatrixXd::Identity(4, 4), M1, M2, M3, M4, M5, M6, M_end};
+    Eigen::VectorXd S[] = {S1,S2,S3,S4,S5,S6};
+    Eigen::MatrixXd MList[7];
+    Eigen::VectorXd AList[7];   
+    Eigen::MatrixXd TList[7];
+    Eigen::MatrixXd GList[6];
+    AList[6] = Eigen::VectorXd::Zero(6);
+
+    for (int i = 1; i <= 7; i++){
+        Eigen::MatrixXd M_inv = M[i].inverse();
+        MList[i-1] = M_inv * M[i-1];
+        if (i<7) { 
+            AList[i-1] = mr::Adjoint(M_inv) * S[i-1]; }
+        TList[i-1] = mr::MatrixExp6(mr::VecTose3(-AList[i-1]*theta(i-1))) * MList[i-1];
+    }
+
+    // Forward pass
+    Eigen::VectorXd VList[7];
+    Eigen::VectorXd VdList[7];
+    VList[0] = Eigen::VectorXd::Zero(6);
+    VdList[0] << 0,0,0,0,0,9.81;
+
+    for (int i = 1; i <= 6; i++){
+        VList[i] = mr::Adjoint(TList[i-1])*VList[i-1]  +  AList[i-1]*angularVel[i-1];
+        VdList[i] = mr::Adjoint(TList[i-1])*VdList[i-1]  +  mr::ad(VList[i])*AList[i-1]*angularVel[i-1]  +  AList[i-1]*angularAccel[i-1]; 
+    }
+
+    // Backward pass
+    Eigen::VectorXd FList[7];
+    Eigen::VectorXd tau(6);
+    FList[6] == Eigen::VectorXd::Zero(6);
+
+    for (int i = 5; i >= 0; i--){
+        FList[i] = mr::Adjoint(TList[i+1]).transpose()*FList[i+1]  +  GList[i]*VdList[i+1]  -  mr::Adjoint(VList[i+1]).transpose()*GList[i]*VList[i+1];
+        tau[i] = FList[i].transpose() * AList[i];
+    }
+
+    return tau;
+}
+
+Eigen::VectorXd Robot::MotionControl(const float Kp, const float Ki, const float Kd, const Eigen::VectorXd &currentAngles, const Eigen::VectorXd &desiredAngles, const Eigen::VectorXd &currentAngularVel, const Eigen::VectorXd &desiredAngularVel, const float dt, const Eigen::VectorXd &feedforward)
+{
+    Eigen::MatrixXd matKp = Eigen::MatrixXd::Identity(6, 6) * Kp;
+    Eigen::MatrixXd matKi = Eigen::MatrixXd::Identity(6, 6) * Ki;
+    Eigen::MatrixXd matKd = Eigen::MatrixXd::Identity(6, 6) * Kd;
+
+    Eigen::VectorXd error = desiredAngles - currentAngles;
+    static Eigen::VectorXd errorInt = Eigen::VectorXd::Zero(6);
+    errorInt += error*dt;
+    Eigen::VectorXd errorDot = desiredAngularVel - currentAngularVel;
+
+    Eigen::VectorXd input = feedforward + matKp*error + matKi*errorInt + matKd*errorDot;
+    Eigen::VectorXd tau = InverseDynamics(currentAngles, currentAngularVel, input);
+
+    return tau;
 }
