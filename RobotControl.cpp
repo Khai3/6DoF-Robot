@@ -40,6 +40,52 @@ Robot::Robot(float r1_in, float r2_in, float r3_in, float d1_in, float d4_in, fl
             0,1,0,d1+r2+r3,
             0,0,0,1;
     
+    // Initialise spatial inertia matrices of robot links in the center-of-mass frames
+    float m1,m2,m3,m4,m5; //Mass of links (kg)
+    m1= 1.5;  m2=0.5;  m3=0.05;  m4=0.1;  m5=0.01;
+
+    G1 << 747.2,0,0,0,0,0,
+          0,42.31,0,0,0,0,
+          0,0,772.9,0,0,0,
+          0,0,0,m1,0,0,
+          0,0,0,0,m1,0,
+          0,0,0,0,0,m1;   
+
+    G2 << 476.7,0,0,0,0,0,
+          0,476.7,0,0,0,0,
+          0,0,16.67,0,0,0,
+          0,0,0,m2,0,0,
+          0,0,0,0,m2,0,
+          0,0,0,0,0,m2;
+
+    G3 << 112.7,0,0,0,0,0,
+          0,112.7,0,0,0,0,
+          0,0,16.67,0,0,0,
+          0,0,0,m3,0,0,
+          0,0,0,0,m3,0,
+          0,0,0,0,0,m3;               
+
+    G4 << 509.2,0,0,0,0,0,
+          0,509.2,0,0,0,0,
+          0,0,16.67,0,0,0,
+          0,0,0,m4,0,0,
+          0,0,0,0,m4,0,
+          0,0,0,0,0,m4;  
+
+    G5 << 121.3,0,0,0,0,0,
+          0,121.3,0,0,0,0,
+          0,0,16.67,0,0,0,
+          0,0,0,m5,0,0,
+          0,0,0,0,m5,0,
+          0,0,0,0,0,m5;  
+
+    G6 << 0,0,0,0,0,0,
+          0,0,0,0,0,0,
+          0,0,0,0,0,0,
+          0,0,0,0,0,0,
+          0,0,0,0,0,0,
+          0,0,0,0,0,0;  
+
     // Calculate screw axes of the robot joints at its home configuration
     S1 << 0,0,1,0,0,0;  
     S2 << 0,-1,0,d1,0,-r1;
@@ -338,23 +384,24 @@ Eigen::VectorXd Robot::InverseDynamics(const Eigen::VectorXd &theta, const Eigen
     Eigen::MatrixXd M[] = {Eigen::MatrixXd::Identity(4, 4), M1, M2, M3, M4, M5, M6, M_end};
     Eigen::VectorXd S[] = {S1,S2,S3,S4,S5,S6};
     Eigen::MatrixXd MList[7];
-    Eigen::VectorXd AList[7];   
+    Eigen::VectorXd AList[6];   
     Eigen::MatrixXd TList[7];
-    Eigen::MatrixXd GList[6];
-    AList[6] = Eigen::VectorXd::Zero(6);
+    Eigen::MatrixXd GList[] = {G1,G2,G3,G4,G5,G6};
 
     for (int i = 1; i <= 7; i++){
         Eigen::MatrixXd M_inv = M[i].inverse();
         MList[i-1] = M_inv * M[i-1];
         if (i<7) { 
-            AList[i-1] = mr::Adjoint(M_inv) * S[i-1]; }
-        TList[i-1] = mr::MatrixExp6(mr::VecTose3(-AList[i-1]*theta(i-1))) * MList[i-1];
+            AList[i-1] = mr::Adjoint(M_inv) * S[i-1]; 
+            TList[i-1] = mr::MatrixExp6(mr::VecTose3(-AList[i-1]*theta(i-1))) * MList[i-1]; }
     }
+    TList[6] = MList[6]; 
 
     // Forward pass
     Eigen::VectorXd VList[7];
     Eigen::VectorXd VdList[7];
     VList[0] = Eigen::VectorXd::Zero(6);
+    VdList[0] = Eigen::VectorXd::Zero(6);
     VdList[0] << 0,0,0,0,0,9.81;
 
     for (int i = 1; i <= 6; i++){
@@ -365,11 +412,14 @@ Eigen::VectorXd Robot::InverseDynamics(const Eigen::VectorXd &theta, const Eigen
     // Backward pass
     Eigen::VectorXd FList[7];
     Eigen::VectorXd tau(6);
-    FList[6] == Eigen::VectorXd::Zero(6);
+    FList[6] = Eigen::VectorXd::Zero(6);
+    float scale = 1e4;
 
     for (int i = 5; i >= 0; i--){
-        FList[i] = mr::Adjoint(TList[i+1]).transpose()*FList[i+1]  +  GList[i]*VdList[i+1]  -  mr::Adjoint(VList[i+1]).transpose()*GList[i]*VList[i+1];
+        FList[i] = mr::Adjoint(TList[i+1]).transpose()*FList[i+1] +  GList[i]*VdList[i+1] -  mr::ad(VList[i+1]).transpose()*GList[i]*VList[i+1];
         tau[i] = FList[i].transpose() * AList[i];
+        tau[i] /= scale;
+        std::cout<< VdList[i] << std::endl;
     }
 
     return tau;

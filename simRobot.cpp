@@ -31,10 +31,24 @@ void setJointPos(const Eigen::VectorXd &theta)
     }
 }
 
-void setJointVel(const Eigen::VectorXd vel) 
+void setJointVel(const Eigen::VectorXd &vel) 
 {
     for (int i = 0; i < sizeof(jointList)/sizeof(int); i++){
         sim.setJointTargetVelocity(jointList[i],vel[i]);
+    }
+}
+
+void setJointTorque(const Eigen::VectorXd &torque) 
+{
+    for (int i = 0; i < sizeof(jointList)/sizeof(int); i++){
+        // if (torque[i] > 0) {
+        //     sim.setJointTargetVelocity(jointList[i],999); 
+        // }
+        // else {
+        //     sim.setJointTargetVelocity(jointList[i],-999); 
+        // }
+        // sim.setJointMaxForce(jointList[i],5);
+        sim.setJointTargetForce(jointList[i],torque[i],true);
     }
 }
 
@@ -46,6 +60,16 @@ Eigen::VectorXd getJointPos()
     }
     return currentTheta;
 }
+
+Eigen::VectorXd getJointVel()
+{
+    Eigen::VectorXd currentThetaDot(6);
+    for (int i = 0; i < sizeof(jointList)/sizeof(int); i++){
+        currentThetaDot[i] = sim.getJointVelocity(jointList[i]);
+    }
+    return currentThetaDot;
+}
+
 
 Eigen::MatrixXd getObjectTransform(int handle, float scale = 1000)
 {
@@ -215,6 +239,27 @@ void EndVelControl(std::vector<std::tuple<Eigen::Matrix4d, float>> traj,float Kp
     // stepToRest();
 }
 
+void JointTorqueControl(std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj, float Kp, float Ki, float Kd)
+{
+    setControlMode("Torque");
+    const float startTime = sim.getSimulationTime(); 
+        for (const auto& jointStamped : traj) {
+            Eigen::VectorXd thetaTarget = std::get<0>(jointStamped);
+            Eigen::VectorXd thetaDot = std::get<1>(jointStamped);
+            float elapsedTime = std::get<2>(jointStamped) + startTime;
+            while (true) {
+                client.step(); 
+                Eigen::VectorXd currentTheta = getJointPos();
+                Eigen::VectorXd currentThetaDot = getJointVel();
+                Eigen::VectorXd tau = ArmBot.MotionControl(Kp, Ki, Kd, currentTheta, thetaTarget, currentThetaDot, thetaDot, sim.getSimulationTimeStep());  
+                setJointTorque(tau);
+                if (sim.getSimulationTime() > elapsedTime) {
+                    break;
+                }
+            }
+        }
+}
+
 //=================
 // Simulation Tests
 //=================
@@ -234,7 +279,7 @@ void IKSim(Eigen::Matrix4d endpose)
     setJointPos(theta);    
 }
 
-void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, const float Tf, const int N, const std::string &method, const std::string &control, const float Kp = 10, const float Ki = 1)
+void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend, const float Tf, const int N, const std::string &method, const std::string &control, const float Kp = 10, const float Ki = 1, const float Kd = 0)
 {
     std::vector<std::tuple<Eigen::VectorXd, Eigen::VectorXd, float>> traj = ArmBot.JointTrajectory(thetastart,thetaend,Tf,N,method);
     client.setStepping(true);
@@ -242,6 +287,9 @@ void TrajSim(const Eigen::VectorXd &thetastart, const Eigen::VectorXd &thetaend,
     
     if (control == std::string("VelocityCtrl")){
         JointVelControl(traj,Kp,Ki);
+    }
+    else if (control == std::string("TorqueCtrl")){
+        JointTorqueControl(traj,Kp,Ki,Kd);
     }
     else{ trackJointStamped(traj);}
 }
@@ -313,13 +361,14 @@ int main(int argc, char *argv[])
 
     else if (argv[1] == std::string("JointTraj"))
     {
-        float Tf = 3;
+        float Tf = 5;
         int N = 20;
-        float Kp = 10;
-        float Ki = 0.5;
-        TrajSim(thetastart,thetaend,Tf,N,"Quintic","VelocityCtrl",Kp,Ki);
+        float Kp = 2;
+        float Ki = 1;
+        float Kd = 0.5;
+        TrajSim(thetastart,thetaend,Tf,N,"Quintic","TorqueCtrl",Kp,Ki,Kd);
         sleep(1);
-        TrajSim(thetaend,thetastart,Tf,N,"Quintic","VelocityCtrl",Kp,Ki);
+        TrajSim(thetaend,thetastart,Tf,N,"Quintic","TorqueCtrl",Kp,Ki,Kd);
     }
 
     else if (argv[1] == std::string("ScrewTraj"))

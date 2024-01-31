@@ -7,7 +7,7 @@ class Robot
 {
 public:
     /* Constructor
-     * Input: link lengths of Skyentific Robot
+     * Input: link lengths of Skyentific Robot (mm)
      * Description: Define the link lengths of Robot. The home postion 'M' and its corresponding screw axes are defined and
      *              calculated here as well
      */   
@@ -155,15 +155,29 @@ public:
      */
     Eigen::VectorXd VelocityEndControl(const float Kp, const float Ki, const Eigen::MatrixXd &currentX, const Eigen::MatrixXd &desiredX, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
 
-        /* Inputs: 
+    /* Inputs: 
      *   angles      : Vector of curent angles
      *   angularVel  : Vector of angular velocities
      *   angularAccel: Vector of angular acceleration
      * Description: Compute the torque required to produce a desired motion 
-     * Output: Torque Vector
+     * Output: Vector of torques
      */
     Eigen::VectorXd InverseDynamics(const Eigen::VectorXd &angles, const Eigen::VectorXd &angularVel, const Eigen::VectorXd &angularAccel);
 
+    /* Inputs: 
+     *   Kp               : Proportional Gain Value
+     *   Ki               : Integral Gain Value
+     *   Kd               : Derivative Gain Value
+     *   currentAngles    : Vector of current joint angles of robot
+     *   desiredAngles    : Vector of desired joint angles of robot
+     *   currentAngularVel: Vector of current joint anglular velocities of robot
+     *   desiredAngularVel: Vector of desired joint anglular velocities of robot
+     *   dt               : Time step
+     *   feedforward      : Vector of joint accelerations as feedforward control
+     * Description: Compute the required joint torques of the robot using feedback 
+     *              and feedforward control
+     * Output: The vector of joint torques for actuation
+     */
     Eigen::VectorXd MotionControl(const float Kp, const float Ki, const float Kd, const Eigen::VectorXd &currentAngles, const Eigen::VectorXd &desiredAngles, const Eigen::VectorXd &currentAngularVel, const Eigen::VectorXd &desiredAngularVel, const float dt, const Eigen::VectorXd &feedforward = Eigen::VectorXd::Zero(6));
 
 private:
@@ -179,6 +193,14 @@ private:
     Eigen::Matrix4d M4;
     Eigen::Matrix4d M5;
     Eigen::Matrix4d M6;
+
+    Eigen::MatrixXd G1{6,6};
+    Eigen::MatrixXd G2{6,6};
+    Eigen::MatrixXd G3{6,6};
+    Eigen::MatrixXd G4{6,6};
+    Eigen::MatrixXd G5{6,6};
+    Eigen::MatrixXd G6{6,6};
+
     Eigen::VectorXd S1{6};
     Eigen::VectorXd S2{6};
     Eigen::VectorXd S3{6};
